@@ -1,0 +1,52 @@
+import type { Currency, TransactionType } from "./domain";
+
+export type WalletRecord = {
+  id: string;
+  name: string;
+  currency: Currency;
+  openingBalance: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Category = {
+  id: string;
+  name: string;
+  type: TransactionType;
+};
+
+export type TransactionRecord = {
+  id: string;
+  walletId: string;
+  type: TransactionType;
+  amount: number;
+  categoryId: string;
+  date: string;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ExchangeRateCache = {
+  id: "JPY_IDR";
+  base: "JPY";
+  quote: "IDR";
+  rate: number;
+  source: string;
+  fetchedAt: string;
+  cachedAt: string;
+};
+
+export type Preferences = {
+  theme: "light" | "dark" | "system";
+};
+
+export type BackupEnvelope = {
+  schemaVersion: 1;
+  exportedAt: string;
+  app: "Cuanku";
+  wallets: WalletRecord[];
+  transactions: TransactionRecord[];
+  categories: Category[];
+  preferences?: Preferences;
+};

@@ -1,0 +1,57 @@
+import { z } from "zod";
+
+export const walletSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1).max(80),
+  currency: z.enum(["JPY", "IDR"]),
+  openingBalance: z.number().int().nonnegative(),
+  createdAt: z.iso.datetime({ offset: true }),
+  updatedAt: z.iso.datetime({ offset: true }),
+});
+
+export const transactionSchema = z.object({
+  id: z.string().min(1),
+  walletId: z.string().min(1),
+  type: z.enum(["income", "expense"]),
+  amount: z.number().int().positive(),
+  categoryId: z.string().min(1),
+  date: z.iso.datetime({ offset: true }),
+  note: z.string().max(500).optional(),
+  createdAt: z.iso.datetime({ offset: true }),
+  updatedAt: z.iso.datetime({ offset: true }),
+});
+
+export const categorySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1),
+  type: z.enum(["income", "expense"]),
+});
+
+export const backupSchema = z.object({
+  schemaVersion: z.literal(1),
+  exportedAt: z.iso.datetime({ offset: true }),
+  app: z.literal("Cuanku"),
+  wallets: z.array(walletSchema),
+  transactions: z.array(transactionSchema),
+  categories: z.array(categorySchema),
+  preferences: z.object({ theme: z.enum(["light", "dark", "system"]) }).optional(),
+});
+
+export function validateBackup(value: unknown) {
+  const parsed = backupSchema.parse(value);
+  const walletIds = new Set(parsed.wallets.map((wallet) => wallet.id));
+  const categoryIds = new Set(parsed.categories.map((category) => category.id));
+  if (new Set(parsed.wallets.map((wallet) => wallet.id)).size !== parsed.wallets.length) {
+    throw new Error("Backup contains duplicate wallet IDs");
+  }
+  if (new Set(parsed.transactions.map((transaction) => transaction.id)).size !== parsed.transactions.length) {
+    throw new Error("Backup contains duplicate transaction IDs");
+  }
+  if ([...parsed.transactions].some((transaction) => !walletIds.has(transaction.walletId))) {
+    throw new Error("A transaction refers to a wallet that does not exist");
+  }
+  if ([...parsed.transactions].some((transaction) => !categoryIds.has(transaction.categoryId))) {
+    throw new Error("A transaction refers to a category that does not exist");
+  }
+  return parsed;
+}
