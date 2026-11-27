@@ -27,9 +27,16 @@ const backup = {
 };
 
 describe("backup validation", () => {
-  it("accepts a valid backup", () => {
-    expect(validateBackup(backup)).toMatchObject(backup);
-    expect(validateBackup(backup).budgets).toEqual([]);
+  it("migrates a valid version 1 backup without losing transactions", () => {
+    const migrated = validateBackup(backup);
+    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.transactions).toEqual(backup.transactions);
+    expect(migrated.budgets).toEqual([]);
+  });
+
+  it("adds the default reminder interval when migrating legacy preferences", () => {
+    const migrated = validateBackup({ ...backup, preferences: { theme: "dark" } });
+    expect(migrated.preferences).toEqual({ theme: "dark", backupReminderDays: 14 });
   });
 
   it("accepts older categories without icons and rejects unknown icons", () => {
@@ -40,6 +47,30 @@ describe("backup validation", () => {
     };
 
     expect(() => validateBackup(invalid)).toThrow();
+  });
+
+  it("preserves current backup preferences and budgets", () => {
+    const current = validateBackup({
+      ...backup,
+      schemaVersion: 2,
+      budgets: [{
+        id: "budget-1",
+        walletId: "wallet-1",
+        categoryId: "expense-food",
+        month: "2026-11",
+        amount: 5000,
+        createdAt: "2026-11-01T00:00:00.000Z",
+        updatedAt: "2026-11-01T00:00:00.000Z",
+      }],
+      preferences: { theme: "dark", backupReminderDays: 30 },
+    });
+
+    expect(current.preferences).toEqual({ theme: "dark", backupReminderDays: 30 });
+    expect(current.budgets).toHaveLength(1);
+  });
+
+  it("rejects unsupported backup versions with a clear error", () => {
+    expect(() => validateBackup({ ...backup, schemaVersion: 99 })).toThrow(/tidak didukung/i);
   });
 
   it("rejects orphaned transactions without changing input", () => {

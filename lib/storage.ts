@@ -1,5 +1,12 @@
-import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import {
+  openDB,
+  type DBSchema,
+  type IDBPDatabase,
+  type IDBPTransaction,
+  type StoreNames,
+} from "idb";
 import type {
+  BackupReminderDays,
   BudgetRecord,
   Category,
   ExchangeRateCache,
@@ -7,13 +14,39 @@ import type {
   WalletRecord,
 } from "./models";
 
-interface CuankuDB extends DBSchema {
+export const DATABASE_SCHEMA_VERSION = 3;
+
+export interface CuankuDB extends DBSchema {
   wallets: { key: string; value: WalletRecord };
   transactions: { key: string; value: TransactionRecord };
   categories: { key: string; value: Category };
   budgets: { key: string; value: BudgetRecord };
   exchangeRate: { key: string; value: ExchangeRateCache };
   meta: { key: string; value: unknown };
+}
+
+function isBackupReminderDays(value: unknown): value is BackupReminderDays {
+  return value === 7 || value === 14 || value === 30;
+}
+
+export function applyCuankuMigrations(
+  db: IDBPDatabase<CuankuDB>,
+  oldVersion: number,
+  transaction: IDBPTransaction<CuankuDB, StoreNames<CuankuDB>[], "versionchange">,
+) {
+  if (oldVersion < 1) {
+    db.createObjectStore("wallets", { keyPath: "id" });
+    db.createObjectStore("transactions", { keyPath: "id" });
+    db.createObjectStore("categories", { keyPath: "id" });
+    db.createObjectStore("exchangeRate", { keyPath: "id" });
+    db.createObjectStore("meta");
+  }
+  if (oldVersion < 2) {
+    db.createObjectStore("budgets", { keyPath: "id" });
+  }
+  if (oldVersion < 3) {
+    void transaction.objectStore("meta").put(DATABASE_SCHEMA_VERSION, "schemaVersion");
+  }
 }
 
 let dbPromise: Promise<IDBPDatabase<CuankuDB>> | null = null;
@@ -24,18 +57,9 @@ export function getDb() {
     let blockedTimeout: ReturnType<typeof setTimeout> | null = null;
     let settled = false;
     const opening = new Promise<IDBPDatabase<CuankuDB>>((resolve, reject) => {
-      const request = openDB<CuankuDB>("cuanku", 2, {
-        upgrade(db, oldVersion) {
-          if (oldVersion < 1) {
-            db.createObjectStore("wallets", { keyPath: "id" });
-            db.createObjectStore("transactions", { keyPath: "id" });
-            db.createObjectStore("categories", { keyPath: "id" });
-            db.createObjectStore("exchangeRate", { keyPath: "id" });
-            db.createObjectStore("meta");
-          }
-          if (oldVersion < 2) {
-            db.createObjectStore("budgets", { keyPath: "id" });
-          }
+      const request = openDB<CuankuDB>("cuanku", DATABASE_SCHEMA_VERSION, {
+        upgrade(db, oldVersion, _newVersion, transaction) {
+          applyCuankuMigrations(db, oldVersion, transaction);
         },
         blocked() {
           if (blockedTimeout) return;
@@ -133,14 +157,64 @@ export async function putExchangeRate(rate: ExchangeRateCache) {
   return (await getDb()).put("exchangeRate", rate);
 }
 
+export async function getLastBackupAt(): Promise<string | null> {
+  const value = await (await getDb()).get("meta", "lastBackupAt");
+  if (value === undefined) return null;
+  if (typeof value === "string" && Number.isFinite(Date.parse(value))) return value;
+  console.warn("Invalid backup timestamp found in local metadata; showing the backup reminder.");
+  return null;
+}
+
+export async function getBackupReminderDays(): Promise<BackupReminderDays> {
+  const value = await (await getDb()).get("meta", "backupReminderDays");
+  if (value === undefined) return 14;
+  if (isBackupReminderDays(value)) return value;
+  console.warn("Invalid backup reminder interval found in local metadata; using 14 days.");
+  return 14;
+}
+
+export async function putBackupMetadata(
+  lastBackupAt: string | null,
+  backupReminderDays?: BackupReminderDays,
+) {
+  if (lastBackupAt !== null && !Number.isFinite(Date.parse(lastBackupAt))) {
+    throw new Error("Backup timestamp must be a valid date");
+  }
+  if (backupReminderDays !== undefined && !isBackupReminderDays(backupReminderDays)) {
+    throw new Error("Backup reminder interval is not supported");
+  }
+  const db = await getDb();
+  const tx = db.transaction("meta", "readwrite");
+  if (lastBackupAt === null) {
+    await tx.store.delete("lastBackupAt");
+  } else {
+    await tx.store.put(lastBackupAt, "lastBackupAt");
+  }
+  if (backupReminderDays !== undefined) {
+    await tx.store.put(backupReminderDays, "backupReminderDays");
+  }
+  await tx.done;
+}
+
 export async function replaceAllData(data: {
   wallets: WalletRecord[];
   transactions: TransactionRecord[];
   categories: Category[];
   budgets: BudgetRecord[];
+  lastBackupAt?: string | null;
+  backupReminderDays?: BackupReminderDays;
 }) {
+  if (
+    typeof data.lastBackupAt === "string" &&
+    !Number.isFinite(Date.parse(data.lastBackupAt))
+  ) {
+    throw new Error("Backup timestamp must be a valid date");
+  }
+  if (data.backupReminderDays !== undefined && !isBackupReminderDays(data.backupReminderDays)) {
+    throw new Error("Backup reminder interval is not supported");
+  }
   const db = await getDb();
-  const tx = db.transaction(["wallets", "transactions", "categories", "budgets"], "readwrite");
+  const tx = db.transaction(["wallets", "transactions", "categories", "budgets", "meta"], "readwrite");
   await Promise.all([
     tx.objectStore("wallets").clear(),
     tx.objectStore("transactions").clear(),
@@ -153,5 +227,13 @@ export async function replaceAllData(data: {
     ...data.categories.map((category) => tx.objectStore("categories").put(category)),
     ...data.budgets.map((budget) => tx.objectStore("budgets").put(budget)),
   ]);
+  if (data.lastBackupAt === null) {
+    await tx.objectStore("meta").delete("lastBackupAt");
+  } else if (data.lastBackupAt) {
+    await tx.objectStore("meta").put(data.lastBackupAt, "lastBackupAt");
+  }
+  if (data.backupReminderDays !== undefined) {
+    await tx.objectStore("meta").put(data.backupReminderDays, "backupReminderDays");
+  }
   await tx.done;
 }

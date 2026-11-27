@@ -45,8 +45,10 @@ import {
   type TransactionType,
 } from "../lib/domain";
 import { CATEGORY_ICON_OPTIONS, DEFAULT_CATEGORIES } from "../lib/categories";
+import { isBackupReminderDue } from "../lib/backup";
 import type {
   BackupEnvelope,
+  BackupReminderDays,
   BudgetRecord,
   Category,
   CategoryIconId,
@@ -61,11 +63,14 @@ import {
   deleteBudget,
   deleteWallet,
   getCategories,
+  getBackupReminderDays,
   getBudgets,
   getExchangeRate,
+  getLastBackupAt,
   getTransactions,
   getWallets,
   putCategories,
+  putBackupMetadata,
   putBudget,
   putExchangeRate,
   putTransaction,
@@ -74,9 +79,11 @@ import {
 } from "../lib/storage";
 import { categorySchema, validateBackup } from "../lib/validation";
 import { createTransactionsCsv } from "../lib/csv";
+import { BACKUP_REMINDER_OPTIONS } from "../lib/models";
 
 type View = "dashboard" | "transactions" | "wallets" | "budgets" | "reports" | "backup" | "settings";
 type ReportTransaction = Pick<TransactionRecord, "date" | "type" | "amount" | "categoryId">;
+type PersistentStorageStatus = "checking" | "granted" | "not-granted" | "unsupported" | "error";
 
 const CATEGORY_ICONS: Record<CategoryIconId, LucideIcon> = {
   briefcase: Briefcase,
@@ -114,6 +121,9 @@ export default function Home() {
   const [budgets, setBudgets] = useState<BudgetRecord[]>([]);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [rate, setRate] = useState<ExchangeRateCache | null>(null);
+  const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
+  const [backupReminderDays, setBackupReminderDays] = useState<BackupReminderDays>(14);
+  const [persistentStorageStatus, setPersistentStorageStatus] = useState<PersistentStorageStatus>("checking");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [theme, setTheme] = useState<Preferences["theme"]>("system");
@@ -158,12 +168,22 @@ export default function Home() {
   useEffect(() => {
     async function load() {
       try {
-        const [storedWallets, storedTransactions, storedCategories, storedRate, storedBudgets] = await Promise.all([
+        const [
+          storedWallets,
+          storedTransactions,
+          storedCategories,
+          storedRate,
+          storedBudgets,
+          storedLastBackupAt,
+          storedBackupReminderDays,
+        ] = await Promise.all([
           getWallets(),
           getTransactions(),
           getCategories(),
           getExchangeRate(),
           getBudgets(),
+          getLastBackupAt(),
+          getBackupReminderDays(),
         ]);
         if (storedCategories.length === 0) {
           await putCategories(DEFAULT_CATEGORIES);
@@ -171,6 +191,8 @@ export default function Home() {
         setWallets(storedWallets);
         setTransactions(storedTransactions);
         setBudgets(storedBudgets);
+        setLastBackupAt(storedLastBackupAt);
+        setBackupReminderDays(storedBackupReminderDays);
         setCategories(
           storedCategories.length
             ? storedCategories.map((category) => ({
@@ -192,6 +214,24 @@ export default function Home() {
       }
     }
     load();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function checkPersistentStorage() {
+      if (!navigator.storage || typeof navigator.storage.persisted !== "function") {
+        setPersistentStorageStatus("unsupported");
+        return;
+      }
+      try {
+        const persisted = await navigator.storage.persisted();
+        if (active) setPersistentStorageStatus(persisted ? "granted" : "not-granted");
+      } catch {
+        if (active) setPersistentStorageStatus("error");
+      }
+    }
+    void checkPersistentStorage();
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -597,24 +637,40 @@ export default function Home() {
     return () => window.clearTimeout(timeout);
   }, [fetchRate]);
 
-  function exportBackup() {
+  async function exportBackup() {
+    const exportedAt = new Date().toISOString();
     const backup: BackupEnvelope = {
-      schemaVersion: 1,
-      exportedAt: new Date().toISOString(),
+      schemaVersion: 2,
+      exportedAt,
       app: "Cuanku",
       wallets,
       transactions,
       categories,
       budgets,
-      preferences: { theme },
+      preferences: { theme, backupReminderDays },
     };
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `cuanku-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    let url: string | null = null;
+    try {
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+      url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `cuanku-backup-${exportedAt.slice(0, 10)}.json`;
+      anchor.click();
+    } catch {
+      if (url) URL.revokeObjectURL(url);
+      setToast("File backup gagal disiapkan. Coba lagi.");
+      return;
+    }
+    if (url) URL.revokeObjectURL(url);
+
+    try {
+      await putBackupMetadata(exportedAt);
+      setLastBackupAt(exportedAt);
+      setToast("Backup disiapkan. Pastikan file tersimpan di perangkat.");
+    } catch {
+      setToast("File backup disiapkan, tetapi status pengingat gagal diperbarui.");
+    }
   }
 
   function exportTransactionsCsv() {
@@ -637,6 +693,41 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
+  async function updateBackupReminder(value: string) {
+    const days = BACKUP_REMINDER_OPTIONS.find((option) => String(option) === value);
+    if (!days) {
+      setToast("Pilih interval pengingat backup yang tersedia.");
+      return;
+    }
+    try {
+      await putBackupMetadata(lastBackupAt, days);
+      setBackupReminderDays(days);
+      setToast("Pengingat backup berhasil diperbarui.");
+    } catch {
+      setToast("Pengaturan pengingat backup gagal disimpan.");
+    }
+  }
+
+  async function requestPersistentStorage() {
+    if (!navigator.storage || typeof navigator.storage.persist !== "function") {
+      setPersistentStorageStatus("unsupported");
+      setToast("Browser ini tidak mendukung penyimpanan persisten.");
+      return;
+    }
+    try {
+      const granted = await navigator.storage.persist();
+      setPersistentStorageStatus(granted ? "granted" : "not-granted");
+      setToast(
+        granted
+          ? "Permintaan penyimpanan persisten disetujui."
+          : "Browser belum memberikan penyimpanan persisten. Buat backup berkala.",
+      );
+    } catch {
+      setPersistentStorageStatus("error");
+      setToast("Status penyimpanan persisten tidak dapat diperbarui.");
+    }
+  }
+
   async function importBackup(file: File) {
     try {
       const backup = validateBackup(JSON.parse(await file.text()));
@@ -646,25 +737,44 @@ export default function Home() {
         transactions: backup.transactions,
         categories: backup.categories,
         budgets: backup.budgets,
+        lastBackupAt: backup.exportedAt,
+        backupReminderDays: backup.preferences?.backupReminderDays,
       });
       await refreshWallets();
       await refreshTransactions();
       await refreshBudgets();
       setCategories(backup.categories);
+      setLastBackupAt(backup.exportedAt);
+      if (backup.preferences?.backupReminderDays) {
+        setBackupReminderDays(backup.preferences.backupReminderDays);
+      }
       if (backup.preferences) setTheme(backup.preferences.theme);
       setToast("Backup berhasil dipulihkan");
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "File backup tidak valid");
+      setToast(
+        error instanceof SyntaxError
+          ? "File JSON backup rusak. Data lokal tidak diubah."
+          : error instanceof Error
+            ? error.message
+            : "File backup tidak valid. Data lokal tidak diubah.",
+      );
     }
   }
 
   async function deleteAllData() {
     if (!window.confirm("Hapus seluruh dompet dan transaksi? Tindakan ini tidak dapat dibatalkan.")) return;
-    await replaceAllData({ wallets: [], transactions: [], categories: DEFAULT_CATEGORIES, budgets: [] });
+    await replaceAllData({
+      wallets: [],
+      transactions: [],
+      categories: DEFAULT_CATEGORIES,
+      budgets: [],
+      lastBackupAt: null,
+    });
     await refreshWallets();
     await refreshTransactions();
     await refreshBudgets();
     setCategories(DEFAULT_CATEGORIES);
+    setLastBackupAt(null);
     setToast("Seluruh data berhasil dihapus");
   }
 
@@ -675,6 +785,7 @@ export default function Home() {
   const budgetCategoryName = (id: string) =>
     categories.find((category) => category.id === id)?.name ?? "Kategori";
   const currentBudgets = budgets.filter((budget) => budget.month === budgetViewMonth);
+  const backupReminderDue = isBackupReminderDue(lastBackupAt, backupReminderDays);
   const sortedTransactions = [...transactions].sort((a, b) => b.date.localeCompare(a.date));
   const normalizedTransactionSearch = transactionSearch.trim().toLocaleLowerCase();
   const visibleTransactions = sortedTransactions.filter((transaction) => {
@@ -811,6 +922,20 @@ export default function Home() {
           <>
             {view === "dashboard" && (
               <section>
+                {backupReminderDue && (
+                  <aside className="backup-reminder" aria-labelledby="backup-reminder-title">
+                    <div>
+                      <strong id="backup-reminder-title">Saatnya membuat backup data</strong>
+                      <p>
+                        {lastBackupAt
+                          ? `Backup terakhir ${new Date(lastBackupAt).toLocaleDateString("id-ID")}.`
+                          : "Belum ada backup yang tercatat di perangkat ini."}{" "}
+                        Simpan salinan JSON di tempat yang aman; data utama tetap hanya ada di browser ini.
+                      </p>
+                    </div>
+                    <button className="primary-button" onClick={() => void exportBackup()}><Download size={17} /> Backup sekarang</button>
+                  </aside>
+                )}
                 <div className="balance-grid">
                   <article className="balance-card featured">
                     <span>Saldo JPY</span>
@@ -1092,6 +1217,38 @@ export default function Home() {
                   <h2>Kurs JPY → IDR</h2>
                   {rate ? <p>1 JPY = {new Intl.NumberFormat("id-ID", { maximumFractionDigits: 4 }).format(rate.rate)} IDR<br /><small>Diperbarui {new Date(rate.cachedAt).toLocaleString("id-ID")}</small></p> : <p>Kurs belum tersedia. Estimasi lintas mata uang akan disembunyikan.</p>}
                   <button className="secondary-button" onClick={() => void fetchRate(true)}>Perbarui kurs</button>
+                </article>
+                <article className="settings-card">
+                  <h2>Pengingat backup</h2>
+                  <p>Pilih seberapa sering Cuanku mengingatkan Anda untuk menyimpan salinan data.</p>
+                  <label className="settings-select-label">Ingatkan setiap
+                    <select value={backupReminderDays} onChange={(event) => void updateBackupReminder(event.target.value)}>
+                      {BACKUP_REMINDER_OPTIONS.map((days) => <option value={days} key={days}>{days} hari</option>)}
+                    </select>
+                  </label>
+                  <small>{lastBackupAt ? `Backup terakhir: ${new Date(lastBackupAt).toLocaleString("id-ID")}` : "Belum ada backup yang tercatat."}</small>
+                </article>
+                <article className="settings-card">
+                  <h2>Penyimpanan browser</h2>
+                  <p>Permintaan ini membantu mencegah browser menghapus data lokal secara otomatis, tetapi tidak menggantikan backup.</p>
+                  <p className="storage-status" aria-live="polite">
+                    {persistentStorageStatus === "checking"
+                      ? "Memeriksa status..."
+                      : persistentStorageStatus === "granted"
+                        ? "Penyimpanan persisten aktif."
+                        : persistentStorageStatus === "not-granted"
+                          ? "Penyimpanan persisten belum diberikan."
+                          : persistentStorageStatus === "unsupported"
+                            ? "Browser ini tidak mendukung fitur penyimpanan persisten."
+                            : "Status penyimpanan tidak dapat diperiksa."}
+                  </p>
+                  <button
+                    className="secondary-button"
+                    disabled={persistentStorageStatus === "checking" || persistentStorageStatus === "granted" || persistentStorageStatus === "unsupported"}
+                    onClick={() => void requestPersistentStorage()}
+                  >
+                    {persistentStorageStatus === "granted" ? "Sudah aktif" : "Minta penyimpanan persisten"}
+                  </button>
                 </article>
                 <article className="settings-card category-settings">
                   <div className="section-heading">

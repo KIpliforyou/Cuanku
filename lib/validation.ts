@@ -40,19 +40,60 @@ export const budgetSchema = z.object({
   updatedAt: z.iso.datetime({ offset: true }),
 });
 
-export const backupSchema = z.object({
-  schemaVersion: z.literal(1),
+const backupContents = {
   exportedAt: z.iso.datetime({ offset: true }),
   app: z.literal("Cuanku"),
   wallets: z.array(walletSchema),
   transactions: z.array(transactionSchema),
   categories: z.array(categorySchema),
   budgets: z.array(budgetSchema).optional(),
+};
+
+const backupV1Schema = z.object({
+  ...backupContents,
+  schemaVersion: z.literal(1),
   preferences: z.object({ theme: z.enum(["light", "dark", "system"]) }).optional(),
 });
 
+export const backupSchema = z.object({
+  ...backupContents,
+  schemaVersion: z.literal(2),
+  preferences: z.object({
+    theme: z.enum(["light", "dark", "system"]),
+    backupReminderDays: z.union([z.literal(7), z.literal(14), z.literal(30)]).optional(),
+  }).optional(),
+});
+
 export function validateBackup(value: unknown) {
-  const parsed = backupSchema.parse(value);
+  const versionResult = z.object({ schemaVersion: z.number().int() }).safeParse(value);
+  if (!versionResult.success) {
+    throw new Error("File backup rusak atau tidak memiliki versi skema.");
+  }
+
+  let parsed: z.infer<typeof backupSchema>;
+  if (versionResult.data.schemaVersion === 1) {
+    const legacy = backupV1Schema.safeParse(value);
+    if (!legacy.success) {
+      throw new Error("Struktur backup versi lama tidak valid. Data lokal tidak diubah.");
+    }
+    parsed = {
+      ...legacy.data,
+      schemaVersion: 2,
+      budgets: legacy.data.budgets ?? [],
+      preferences: legacy.data.preferences
+        ? { ...legacy.data.preferences, backupReminderDays: 14 }
+        : undefined,
+    };
+  } else if (versionResult.data.schemaVersion === 2) {
+    const current = backupSchema.safeParse(value);
+    if (!current.success) {
+      throw new Error("Struktur file backup tidak valid. Data lokal tidak diubah.");
+    }
+    parsed = current.data;
+  } else {
+    throw new Error(`Versi backup ${versionResult.data.schemaVersion} tidak didukung.`);
+  }
+
   const budgets: BudgetRecord[] = parsed.budgets ?? [];
   const walletIds = new Set(parsed.wallets.map((wallet) => wallet.id));
   const categoryIds = new Set(parsed.categories.map((category) => category.id));

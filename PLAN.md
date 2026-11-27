@@ -321,11 +321,11 @@ Layer yang direncanakan:
 - Push ke `origin/main`
 - Deploy Vercel hanya setelah repo dan deployment target siap
 
-### Roadmap Lanjutan — Review Pengguna (Usulan Bertahap)
+### Roadmap Lanjutan — CUANKU_ROADMAP.md
 
-Item di bawah adalah backlog usulan dari review, bukan bagian dari MVP yang sudah disetujui. Kerjakan per fase dengan quality gate yang sama; jangan mengubah invariant keuangan atau mengaktifkan cloud tanpa persetujuan eksplisit.
+Roadmap lanjutan disetujui untuk dikerjakan bertahap. Urutan yang dipilih: Fase 12, 8, 9, 10, 11, 13, 14, 15, 16, 17, lalu 18. Pertahankan invariant keuangan dan jangan mengaktifkan cloud sync tanpa persetujuan eksplisit.
 
-#### Fase 6 — UX Mobile dan Dashboard (selesai lokal; belum dirilis)
+#### Fase 6 — UX Mobile dan Dashboard (dirilis)
 
 - Ringkas navigasi mobile menjadi Ringkasan, Transaksi, Anggaran, dan Laporan; pindahkan Dompet, Backup, dan Pengaturan ke menu “Lainnya”.
 - Jadikan aksi tambah transaksi mudah dijangkau di layar kecil, dengan form singkat dan target maksimal tiga ketukan untuk pencatatan normal.
@@ -333,36 +333,34 @@ Item di bawah adalah backlog usulan dari review, bukan bagian dari MVP yang suda
 - Ganti indikator tunggu dengan skeleton singkat; pertahankan state error pemuatan lokal yang dapat dipulihkan.
 - Pertahankan empty state, kontras, dark/system theme, reduced motion, dan akses keyboard.
 
-#### Fase 7 — Laporan, Kategori, dan Ekspor
+#### Fase 7 — Laporan, Kategori, dan Ekspor (dirilis)
 
 - Tambahkan pencarian dan filter transaksi berdasarkan rentang tanggal, kategori, dompet, dan catatan.
 - Tambahkan tren bulanan, perbandingan bulan sebelumnya, serta distribusi kategori; setiap grafik wajib memiliki tabel aksesibel.
 - Tambahkan ikon kategori dan kategori kustom dengan validasi tipe pemasukan/pengeluaran.
 - Tambahkan export CSV sebagai pelengkap backup JSON; format Excel dapat dipertimbangkan setelah kebutuhan format disepakati.
-- Status: selesai lokal; quality gates dan smoke test UI lolos; belum di-commit atau di-deploy.
 
-#### Fase 8 — Anggaran dan Pencatatan Lebih Praktis
+Fase 6–7 dirilis bersama pada commit `2cbc064`.
 
-- Tampilkan peringatan dalam aplikasi ketika pemakaian anggaran mencapai 80% dan 100%; jangan meminta izin notifikasi browser sebelum ada keputusan pengguna.
-- Tambahkan transaksi berulang yang diproses secara idempoten saat aplikasi dibuka, dengan konfirmasi sebelum membuat transaksi agar tidak terjadi pencatatan ganda.
-- Tambahkan target tabungan dengan nominal, tenggat opsional, dan progres dalam satu mata uang per target.
-- Simpan snapshot kurs pada transaksi hanya sebagai metadata referensi; nominal transaksi dan saldo tetap dalam mata uang dompet.
-- Sediakan preferensi mata uang untuk estimasi gabungan tanpa mengubah tampilan saldo JPY dan IDR yang terpisah.
+#### Fase 12 — Keamanan Data: Backup dan Migrasi
 
-#### Fase 9 — PWA dan Ketahanan Data Lokal
+- Tambahkan versi skema IndexedDB dan migrasi berurutan; versi database tidak dicampur dengan versi file backup.
+- Migrasikan backup v1 ke format terkini tanpa kehilangan transaksi; backup rusak atau versi tak didukung tidak boleh mengganti data.
+- Simpan waktu backup terakhir dan interval pengingat (default 14 hari); tampilkan banner Ringkasan dan tombol backup langsung.
+- Tampilkan status penyimpanan persisten browser; permintaan persist hanya dilakukan setelah tindakan pengguna.
+- Ekspor/impor manual tetap menjadi jalur pemulihan utama. Backup otomatis berbasis File System Access API ditunda sampai izin dan dukungan browser dirancang.
+- Status: implementasi dan validasi selesai; typecheck, lint, build, 23 tes, audit dependency (0 kerentanan), dan smoke test UI mobile lolos.
 
-- Lengkapi app shell offline yang sudah ada dengan manifest, ikon, dan verifikasi alur install PWA.
-- Tambahkan pengingat backup lokal berdasarkan waktu export terakhir.
-- Pertahankan export/import manual sebagai jalur pemulihan utama. Auto-upload ke Google Drive memerlukan persetujuan terpisah, autentikasi, dan perubahan keputusan cloud sync.
-- Lampiran foto struk hanya setelah strategi kuota IndexedDB, kompresi, backup, dan penghapusan data disepakati.
+#### Fase 8 — Kurs JPY ↔ IDR
+- Riwayat dan kurs manual/otomatis; estimasi gabungan selalu menyebut kurs dan tanggal.
 
-#### Fase 10 — Transfer, Remitansi, Utang, dan Privasi
+#### Fase 9 — Transfer Antar-Dompet
+- Transfer biasa hanya antar dompet bermata uang sama; biaya admin dibebankan terpisah ke dompet asal dan masuk pengeluaran “Biaya transfer”.
+- Konversi lintas mata uang merupakan alur terpisah yang membutuhkan kurs eksplisit.
 
-- Rancang transfer antar-dompet sebagai operasi berpasangan yang atomik; catat biaya dan kurs sebagai komponen eksplisit, bukan income/expense buatan.
-- Rancang remitansi sebagai catatan pengiriman terpisah dari transaksi saldo, sesuai invariant remitansi saat ini.
-- Rancang utang/piutang dengan pihak, nominal, mata uang, jatuh tempo opsional, dan penyelesaian yang dapat diaudit.
-- Evaluasi PIN lokal hanya setelah threat model dan opsi enkripsi penyimpanan dibahas; PIN saja tidak boleh dipasarkan sebagai enkripsi data.
-- Fase ini memerlukan review model data, backup versi, migrasi, dan persetujuan sebelum implementasi.
+#### Fase 10–18 — Pencatatan dan Fitur Lanjutan
+- Fase 10 transaksi berulang; Fase 11 peringatan anggaran; Fase 13 PWA; Fase 14 PIN; Fase 15 target tabungan; Fase 16 remitansi; Fase 17 utang/piutang; Fase 18 tag, lampiran struk, dan pencarian lanjut.
+- Terapkan tes migrasi, perlindungan data lokal, dan review model data sebelum menambah entitas.
 
 ## 12. Quality Gates
 

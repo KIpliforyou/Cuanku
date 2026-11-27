@@ -118,6 +118,10 @@ button { cursor: pointer; }
 .muted { color: var(--muted); font-size: 18px !important; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; margin: 34px 0 12px; }
 .section-heading h2 { margin: 0; font-size: 22px; }
+.backup-reminder { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 16px; padding: 18px; border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--line)); border-radius: 14px; background: var(--surface); }
+.backup-reminder strong { font-size: 15px; }
+.backup-reminder p { margin: 5px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.backup-reminder .primary-button { flex: 0 0 auto; }
 .transaction-list { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); }
 .transaction-row {
   min-height: 76px; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto;
@@ -203,6 +207,10 @@ button { cursor: pointer; }
 .distribution-bar span { display: block; height: 100%; border-radius: inherit; background: var(--expense); }
 .settings-card h2 { margin: 0 0 8px; }
 .settings-card p { min-height: 44px; color: var(--muted); line-height: 1.6; }
+.settings-select-label { display: grid; gap: 7px; color: var(--muted); font-size: 13px; font-weight: 800; }
+.settings-select-label select { min-height: 44px; width: 100%; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 9px; padding: 0 12px; background: var(--surface); color: var(--foreground); }
+.storage-status { min-height: 24px !important; }
+.settings-card > small { display: block; margin: 0 0 12px; color: var(--muted); }
 .category-settings { grid-column: 1 / -1; }
 .category-settings .section-heading { align-items: center; margin: 0 0 14px; }
 .category-settings .section-heading p { min-height: 0; margin: 4px 0 0; }
@@ -298,6 +306,8 @@ button { cursor: pointer; }
   .transaction-filter-actions { justify-content: space-between; }
   .category-list { grid-template-columns: 1fr; }
   .category-settings .section-heading { align-items: flex-start; }
+  .backup-reminder { align-items: stretch; flex-direction: column; }
+  .backup-reminder .primary-button { justify-content: center; }
   .wallet-card { grid-template-columns: 44px 1fr 44px; }
   .budget-heading-actions { align-items: stretch; flex-direction: column; }
   .budget-heading-actions .primary-button { width: 100%; }
