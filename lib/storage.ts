@@ -20,20 +20,66 @@ let dbPromise: Promise<IDBPDatabase<CuankuDB>> | null = null;
 
 export function getDb() {
   if (!dbPromise) {
-    dbPromise = openDB<CuankuDB>("cuanku", 2, {
-      upgrade(db, oldVersion) {
-        if (oldVersion < 1) {
-          db.createObjectStore("wallets", { keyPath: "id" });
-          db.createObjectStore("transactions", { keyPath: "id" });
-          db.createObjectStore("categories", { keyPath: "id" });
-          db.createObjectStore("exchangeRate", { keyPath: "id" });
-          db.createObjectStore("meta");
-        }
-        if (oldVersion < 2) {
-          db.createObjectStore("budgets", { keyPath: "id" });
-        }
-      },
+    let activeDb: IDBPDatabase<CuankuDB> | null = null;
+    let blockedTimeout: ReturnType<typeof setTimeout> | null = null;
+    let settled = false;
+    const opening = new Promise<IDBPDatabase<CuankuDB>>((resolve, reject) => {
+      const request = openDB<CuankuDB>("cuanku", 2, {
+        upgrade(db, oldVersion) {
+          if (oldVersion < 1) {
+            db.createObjectStore("wallets", { keyPath: "id" });
+            db.createObjectStore("transactions", { keyPath: "id" });
+            db.createObjectStore("categories", { keyPath: "id" });
+            db.createObjectStore("exchangeRate", { keyPath: "id" });
+            db.createObjectStore("meta");
+          }
+          if (oldVersion < 2) {
+            db.createObjectStore("budgets", { keyPath: "id" });
+          }
+        },
+        blocked() {
+          if (blockedTimeout) return;
+          blockedTimeout = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            dbPromise = null;
+            reject(new Error(
+              "Database lokal sedang dibuka oleh tab Cuanku lain. Tutup tab Cuanku lainnya, lalu coba lagi.",
+            ));
+          }, 8000);
+        },
+        blocking() {
+          activeDb?.close();
+          activeDb = null;
+          dbPromise = null;
+        },
+        terminated() {
+          activeDb = null;
+          dbPromise = null;
+        },
+      });
+
+      request.then(
+        (db) => {
+          if (blockedTimeout) clearTimeout(blockedTimeout);
+          if (settled) {
+            db.close();
+            return;
+          }
+          settled = true;
+          activeDb = db;
+          resolve(db);
+        },
+        (error: unknown) => {
+          if (blockedTimeout) clearTimeout(blockedTimeout);
+          if (settled) return;
+          settled = true;
+          dbPromise = null;
+          reject(error);
+        },
+      );
     });
+    dbPromise = opening;
   }
   return dbPromise;
 }

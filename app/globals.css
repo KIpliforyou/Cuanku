@@ -169,6 +169,9 @@ button { cursor: pointer; }
 .danger-card { border-color: color-mix(in srgb, var(--danger) 25%, var(--line)); }
 .settings-card input[type="file"] { display: none; }
 .loading-state { min-height: 300px; display: grid; place-items: center; color: var(--muted); }
+.load-error { min-height: 300px; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); text-align: center; }
+.load-error h2, .load-error p { margin: 0; }
+.load-error p { max-width: 520px; color: var(--muted); line-height: 1.6; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgb(10 18 14 / 55%); }
 .modal { width: min(460px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; border-radius: 16px; padding: 20px; background: var(--surface); box-shadow: 0 24px 70px rgb(0 0 0 / 22%); }
 .modal-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }

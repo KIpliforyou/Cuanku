@@ -69,6 +69,7 @@ export default function Home() {
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [rate, setRate] = useState<ExchangeRateCache | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [theme, setTheme] = useState<Preferences["theme"]>("system");
   const [themeLoaded, setThemeLoaded] = useState(false);
   const [modal, setModal] = useState<"wallet" | "transaction" | "budget" | null>(null);
@@ -119,8 +120,8 @@ export default function Home() {
         if (savedTheme === "light" || savedTheme === "dark" || savedTheme === "system") {
           setTheme(savedTheme);
         }
-      } catch {
-        setToast("Penyimpanan browser tidak tersedia");
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : "Data lokal tidak dapat dibuka.");
       } finally {
         setThemeLoaded(true);
         setLoading(false);
@@ -517,6 +518,12 @@ export default function Home() {
 
         {loading ? (
           <div className="loading-state">Memuat data lokal...</div>
+        ) : loadError ? (
+          <div className="load-error" role="alert">
+            <h2>Data lokal belum bisa dibuka</h2>
+            <p>{loadError}</p>
+            <button className="primary-button" onClick={() => window.location.reload()}>Coba lagi</button>
+          </div>
         ) : (
           <>
             {view === "dashboard" && (
