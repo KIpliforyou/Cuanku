@@ -4,6 +4,7 @@ import {
   calculateCurrencyBalances,
   calculateEstimatedTotalInIdr,
   calculateEstimatedTotalInJpy,
+  calculateMonthlyTotals,
   calculateWalletBalance,
   type Transaction,
   type Wallet,
@@ -60,5 +61,18 @@ describe("domain balance calculations", () => {
     );
 
     expect(spent).toBe(100);
+  });
+
+  it("calculates monthly income and expense without including other months", () => {
+    expect(
+      calculateMonthlyTotals(
+        [
+          { type: "income", amount: 1000, date: "2026-11-02T12:00:00.000Z" },
+          { type: "expense", amount: 250, date: "2026-11-03T12:00:00.000Z" },
+          { type: "income", amount: 500, date: "2026-10-31T12:00:00.000Z" },
+        ],
+        "2026-11",
+      ),
+    ).toEqual({ income: 1000, expense: 250 });
   });
 });

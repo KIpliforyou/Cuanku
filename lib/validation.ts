@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CATEGORY_ICON_IDS } from "./models";
 import type { BudgetRecord } from "./models";
 
 export const walletSchema = z.object({
@@ -24,8 +25,9 @@ export const transactionSchema = z.object({
 
 export const categorySchema = z.object({
   id: z.string().min(1),
-  name: z.string().trim().min(1),
+  name: z.string().trim().min(1).max(40),
   type: z.enum(["income", "expense"]),
+  icon: z.enum(CATEGORY_ICON_IDS).optional(),
 });
 
 export const budgetSchema = z.object({

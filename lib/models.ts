@@ -9,10 +9,31 @@ export type WalletRecord = {
   updatedAt: string;
 };
 
+export const CATEGORY_ICON_IDS = [
+  "briefcase",
+  "sparkles",
+  "gift",
+  "rotate",
+  "tag",
+  "utensils",
+  "bus",
+  "shopping",
+  "home",
+  "receipt",
+  "phone",
+  "heart",
+  "users",
+  "book",
+  "shield",
+] as const;
+
+export type CategoryIconId = (typeof CATEGORY_ICON_IDS)[number];
+
 export type Category = {
   id: string;
   name: string;
   type: TransactionType;
+  icon?: CategoryIconId;
 };
 
 export type TransactionRecord = {

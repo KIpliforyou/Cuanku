@@ -4,38 +4,59 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  BookOpen,
+  Briefcase,
+  Bus,
   ChartPie,
   Download,
+  Gift,
+  Heart,
+  Home as HomeIcon,
   Landmark,
   LayoutDashboard,
+  MoreHorizontal,
   Moon,
   Pencil,
   Plus,
+  Phone,
+  Receipt,
+  RefreshCw,
   ReceiptText,
+  ShoppingBag,
+  Shield,
+  Sparkles,
   Settings,
   Sun,
+  Tag,
   Trash2,
+  Utensils,
+  Users,
   WalletCards,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import {
   calculateBudgetSpent,
   calculateCurrencyBalances,
   calculateEstimatedTotalInIdr,
+  calculateMonthlyTotals,
   formatMoney,
   type Currency,
   type TransactionType,
 } from "../lib/domain";
-import { DEFAULT_CATEGORIES } from "../lib/categories";
+import { CATEGORY_ICON_OPTIONS, DEFAULT_CATEGORIES } from "../lib/categories";
 import type {
   BackupEnvelope,
   BudgetRecord,
+  Category,
+  CategoryIconId,
   ExchangeRateCache,
   Preferences,
   TransactionRecord,
   WalletRecord,
 } from "../lib/models";
 import {
+  deleteCategory,
   deleteTransaction,
   deleteBudget,
   deleteWallet,
@@ -51,13 +72,38 @@ import {
   putWallet,
   replaceAllData,
 } from "../lib/storage";
-import { validateBackup } from "../lib/validation";
+import { categorySchema, validateBackup } from "../lib/validation";
+import { createTransactionsCsv } from "../lib/csv";
 
 type View = "dashboard" | "transactions" | "wallets" | "budgets" | "reports" | "backup" | "settings";
+type ReportTransaction = Pick<TransactionRecord, "date" | "type" | "amount" | "categoryId">;
+
+const CATEGORY_ICONS: Record<CategoryIconId, LucideIcon> = {
+  briefcase: Briefcase,
+  sparkles: Sparkles,
+  gift: Gift,
+  rotate: RefreshCw,
+  tag: Tag,
+  utensils: Utensils,
+  bus: Bus,
+  shopping: ShoppingBag,
+  home: HomeIcon,
+  receipt: Receipt,
+  phone: Phone,
+  heart: Heart,
+  users: Users,
+  book: BookOpen,
+  shield: Shield,
+};
 
 const makeId = () => crypto.randomUUID();
 const currentMonth = () => {
   const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+};
+const shiftMonth = (month: string, offset: number) => {
+  const [year, value] = month.split("-").map(Number);
+  const date = new Date(year, value - 1 + offset, 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 };
 
@@ -72,7 +118,7 @@ export default function Home() {
   const [loadError, setLoadError] = useState("");
   const [theme, setTheme] = useState<Preferences["theme"]>("system");
   const [themeLoaded, setThemeLoaded] = useState(false);
-  const [modal, setModal] = useState<"wallet" | "transaction" | "budget" | null>(null);
+  const [modal, setModal] = useState<"wallet" | "transaction" | "budget" | "category" | null>(null);
   const [toast, setToast] = useState("");
   const [editingWallet, setEditingWallet] = useState<WalletRecord | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<TransactionRecord | null>(null);
@@ -80,7 +126,17 @@ export default function Home() {
   const [budgetViewMonth, setBudgetViewMonth] = useState(currentMonth);
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<"all" | TransactionType>("all");
   const [transactionCurrencyFilter, setTransactionCurrencyFilter] = useState<"all" | Currency>("all");
-  const [transactionMonthFilter, setTransactionMonthFilter] = useState("");
+  const [transactionFromFilter, setTransactionFromFilter] = useState("");
+  const [transactionToFilter, setTransactionToFilter] = useState("");
+  const [transactionWalletFilter, setTransactionWalletFilter] = useState("all");
+  const [transactionCategoryFilter, setTransactionCategoryFilter] = useState("all");
+  const [transactionSearch, setTransactionSearch] = useState("");
+  const [reportMonth, setReportMonth] = useState(currentMonth);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [categoryNameInput, setCategoryNameInput] = useState("");
+  const [categoryTypeInput, setCategoryTypeInput] = useState<TransactionType>("expense");
+  const [categoryIconInput, setCategoryIconInput] = useState<CategoryIconId>("tag");
 
   const [walletName, setWalletName] = useState("");
   const [walletCurrency, setWalletCurrency] = useState<Currency>("IDR");
@@ -97,6 +153,7 @@ export default function Home() {
   const [budgetMonth, setBudgetMonth] = useState(currentMonth);
   const [budgetAmount, setBudgetAmount] = useState("");
   const modalRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function load() {
@@ -114,7 +171,14 @@ export default function Home() {
         setWallets(storedWallets);
         setTransactions(storedTransactions);
         setBudgets(storedBudgets);
-        setCategories(storedCategories.length ? storedCategories : DEFAULT_CATEGORIES);
+        setCategories(
+          storedCategories.length
+            ? storedCategories.map((category) => ({
+                ...category,
+                icon: category.icon ?? DEFAULT_CATEGORIES.find((item) => item.id === category.id)?.icon,
+              }))
+            : DEFAULT_CATEGORIES,
+        );
         setRate(storedRate ?? null);
         const savedTheme = localStorage.getItem("cuanku-theme");
         if (savedTheme === "light" || savedTheme === "dark" || savedTheme === "system") {
@@ -146,6 +210,25 @@ export default function Home() {
     const timeout = window.setTimeout(() => setToast(""), 3000);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+
+    function dismissMenu(event: MouseEvent | KeyboardEvent) {
+      if (event instanceof KeyboardEvent && event.key === "Escape") {
+        setMoreOpen(false);
+      } else if (event instanceof MouseEvent && event.target instanceof Node && !moreMenuRef.current?.contains(event.target)) {
+        setMoreOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", dismissMenu);
+    document.addEventListener("keydown", dismissMenu);
+    return () => {
+      document.removeEventListener("pointerdown", dismissMenu);
+      document.removeEventListener("keydown", dismissMenu);
+    };
+  }, [moreOpen]);
 
   useEffect(() => {
     if (!modal) return;
@@ -187,6 +270,33 @@ export default function Home() {
     amount: transaction.amount,
   }));
   const balances = calculateCurrencyBalances(domainWallets, domainTransactions);
+  const budgetSpent = (budget: BudgetRecord) =>
+    calculateBudgetSpent(budget, transactions);
+  const dashboardMonth = currentMonth();
+  const monthTransactions = transactions.filter((transaction) => transaction.date.startsWith(dashboardMonth));
+  const monthlyFlow = (currency: Currency) => {
+    const relevantTransactions = monthTransactions.filter((transaction) =>
+      wallets.some((wallet) => wallet.id === transaction.walletId && wallet.currency === currency),
+    );
+    return {
+      income: relevantTransactions
+        .filter((transaction) => transaction.type === "income")
+        .reduce((total, transaction) => total + transaction.amount, 0),
+      expense: relevantTransactions
+        .filter((transaction) => transaction.type === "expense")
+        .reduce((total, transaction) => total + transaction.amount, 0),
+    };
+  };
+  const monthlyFlows: Record<Currency, ReturnType<typeof monthlyFlow>> = {
+    JPY: monthlyFlow("JPY"),
+    IDR: monthlyFlow("IDR"),
+  };
+  const budgetRemainders: Record<Currency, number> = { JPY: 0, IDR: 0 };
+  const dashboardBudgets = budgets.filter((budget) => budget.month === dashboardMonth);
+  for (const budget of dashboardBudgets) {
+    const wallet = wallets.find((item) => item.id === budget.walletId);
+    if (wallet) budgetRemainders[wallet.currency] += budget.amount - budgetSpent(budget);
+  }
 
   async function refreshWallets() {
     setWallets(await getWallets());
@@ -196,6 +306,9 @@ export default function Home() {
   }
   async function refreshBudgets() {
     setBudgets(await getBudgets());
+  }
+  async function refreshCategories() {
+    setCategories(await getCategories());
   }
 
   function openWallet(wallet?: WalletRecord) {
@@ -235,6 +348,10 @@ export default function Home() {
   }
 
   async function removeWallet(wallet: WalletRecord) {
+    if (budgets.some((budget) => budget.walletId === wallet.id)) {
+      setToast("Dompet yang memiliki anggaran tidak dapat dihapus");
+      return;
+    }
     if (transactions.some((transaction) => transaction.walletId === wallet.id)) {
       setToast("Dompet yang memiliki transaksi tidak dapat dihapus");
       return;
@@ -381,6 +498,79 @@ export default function Home() {
     }
   }
 
+  function openCategory(category?: Category) {
+    setEditingCategory(category ?? null);
+    setCategoryNameInput(category?.name ?? "");
+    setCategoryTypeInput(category?.type ?? "expense");
+    setCategoryIconInput(category?.icon ?? "tag");
+    setModal("category");
+  }
+
+  async function saveCategory(event: React.FormEvent) {
+    event.preventDefault();
+    const parsed = categorySchema.safeParse({
+      id: editingCategory?.id ?? makeId(),
+      name: categoryNameInput,
+      type: categoryTypeInput,
+      icon: categoryIconInput,
+    });
+    if (!parsed.success) {
+      setToast("Nama kategori harus terdiri dari 1–40 karakter");
+      return;
+    }
+
+    const duplicate = categories.some(
+      (category) =>
+        category.id !== parsed.data.id &&
+        category.type === parsed.data.type &&
+        category.name.trim().toLocaleLowerCase() === parsed.data.name.toLocaleLowerCase(),
+    );
+    if (duplicate) {
+      setToast("Nama kategori sudah digunakan untuk jenis ini");
+      return;
+    }
+
+    const isReferenced =
+      editingCategory &&
+      (transactions.some((transaction) => transaction.categoryId === editingCategory.id) ||
+        budgets.some((budget) => budget.categoryId === editingCategory.id));
+    if (isReferenced && editingCategory.type !== parsed.data.type) {
+      setToast("Jenis kategori tidak dapat diubah karena sudah digunakan");
+      return;
+    }
+
+    try {
+      await putCategories([
+        ...categories.filter((category) => category.id !== parsed.data.id),
+        parsed.data,
+      ]);
+      await refreshCategories();
+      setModal(null);
+      setEditingCategory(null);
+      setToast(editingCategory ? "Kategori berhasil diperbarui" : "Kategori berhasil ditambahkan");
+    } catch {
+      setToast("Kategori gagal disimpan. Coba lagi.");
+    }
+  }
+
+  async function removeCategory(category: Category) {
+    if (
+      transactions.some((transaction) => transaction.categoryId === category.id) ||
+      budgets.some((budget) => budget.categoryId === category.id)
+    ) {
+      setToast("Kategori yang sudah digunakan transaksi atau anggaran tidak dapat dihapus");
+      return;
+    }
+    if (!window.confirm(`Hapus kategori ${category.name}?`)) return;
+    try {
+      await deleteCategory(category.id);
+      await refreshCategories();
+      setToast("Kategori berhasil dihapus");
+    } catch {
+      setToast("Kategori gagal dihapus. Coba lagi.");
+    }
+  }
+
   const fetchRate = useCallback(async (force = false) => {
     if (!force && rate) {
       const age = Date.now() - new Date(rate.cachedAt).getTime();
@@ -427,6 +617,26 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
+  function exportTransactionsCsv() {
+    const csv = createTransactionsCsv(
+      visibleTransactions.map((transaction) => ({
+        date: transaction.date.slice(0, 10),
+        wallet: walletNameFor(transaction.walletId),
+        currency: wallets.find((wallet) => wallet.id === transaction.walletId)?.currency ?? "",
+        type: transaction.type === "income" ? "Pemasukan" : "Pengeluaran",
+        category: categoryName(transaction.categoryId),
+        amount: transaction.amount,
+        note: transaction.note,
+      })),
+    );
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `cuanku-transaksi-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function importBackup(file: File) {
     try {
       const backup = validateBackup(JSON.parse(await file.text()));
@@ -464,17 +674,63 @@ export default function Home() {
     wallets.find((wallet) => wallet.id === id)?.name ?? "Dompet";
   const budgetCategoryName = (id: string) =>
     categories.find((category) => category.id === id)?.name ?? "Kategori";
-  const budgetSpent = (budget: BudgetRecord) =>
-    calculateBudgetSpent(budget, transactions);
   const currentBudgets = budgets.filter((budget) => budget.month === budgetViewMonth);
   const sortedTransactions = [...transactions].sort((a, b) => b.date.localeCompare(a.date));
+  const normalizedTransactionSearch = transactionSearch.trim().toLocaleLowerCase();
   const visibleTransactions = sortedTransactions.filter((transaction) => {
     const wallet = wallets.find((item) => item.id === transaction.walletId);
+    const date = transaction.date.slice(0, 10);
     const matchesType = transactionTypeFilter === "all" || transaction.type === transactionTypeFilter;
     const matchesCurrency = transactionCurrencyFilter === "all" || wallet?.currency === transactionCurrencyFilter;
-    const matchesMonth = !transactionMonthFilter || transaction.date.startsWith(transactionMonthFilter);
-    return matchesType && matchesCurrency && matchesMonth;
+    const matchesFrom = !transactionFromFilter || date >= transactionFromFilter;
+    const matchesTo = !transactionToFilter || date <= transactionToFilter;
+    const matchesWallet = transactionWalletFilter === "all" || transaction.walletId === transactionWalletFilter;
+    const matchesCategory = transactionCategoryFilter === "all" || transaction.categoryId === transactionCategoryFilter;
+    const matchesSearch =
+      !normalizedTransactionSearch ||
+      (transaction.note?.toLocaleLowerCase().includes(normalizedTransactionSearch) ?? false);
+    return matchesType && matchesCurrency && matchesFrom && matchesTo && matchesWallet && matchesCategory && matchesSearch;
   });
+  const resetTransactionFilters = () => {
+    setTransactionTypeFilter("all");
+    setTransactionCurrencyFilter("all");
+    setTransactionFromFilter("");
+    setTransactionToFilter("");
+    setTransactionWalletFilter("all");
+    setTransactionCategoryFilter("all");
+    setTransactionSearch("");
+  };
+  const reportMonths = Array.from({ length: 6 }, (_, index) => shiftMonth(reportMonth, index - 5));
+  const reportMonthLabel = (month: string) => {
+    const [year, value] = month.split("-").map(Number);
+    return new Intl.DateTimeFormat("id-ID", { month: "short" }).format(new Date(year, value - 1, 1));
+  };
+  const currencyReport = (currency: Currency) => {
+    const relevantTransactions: ReportTransaction[] = transactions.filter((transaction) =>
+      wallets.some((wallet) => wallet.id === transaction.walletId && wallet.currency === currency),
+    );
+    const totals = calculateMonthlyTotals(relevantTransactions, reportMonth);
+    const previousTotals = calculateMonthlyTotals(relevantTransactions, shiftMonth(reportMonth, -1));
+    const trend = reportMonths.map((month) => ({
+      month,
+      ...calculateMonthlyTotals(relevantTransactions, month),
+    }));
+    const categoryTotals = categories
+      .filter((category) => category.type === "expense")
+      .map((category) => ({
+        category,
+        amount: relevantTransactions
+          .filter((transaction) => transaction.type === "expense" && transaction.categoryId === category.id && transaction.date.startsWith(reportMonth))
+          .reduce((sum, transaction) => sum + transaction.amount, 0),
+      }))
+      .filter((item) => item.amount > 0)
+      .sort((a, b) => b.amount - a.amount);
+    return { totals, previousTotals, trend, categoryTotals };
+  };
+  const selectMoreView = (nextView: View) => {
+    setView(nextView);
+    setMoreOpen(false);
+  };
 
   return (
     <div className="app-shell">
@@ -486,15 +742,33 @@ export default function Home() {
         <nav className="nav-list" aria-label="Navigasi utama">
           <NavButton active={view === "dashboard"} icon={<LayoutDashboard size={19} />} label="Ringkasan" onClick={() => setView("dashboard")} />
           <NavButton active={view === "transactions"} icon={<ReceiptText size={19} />} label="Transaksi" onClick={() => setView("transactions")} />
-          <NavButton active={view === "wallets"} icon={<WalletCards size={19} />} label="Dompet" onClick={() => setView("wallets")} />
+          <NavButton className="mobile-more-item" active={view === "wallets"} icon={<WalletCards size={19} />} label="Dompet" onClick={() => setView("wallets")} />
           <NavButton active={view === "budgets"} icon={<ChartPie size={19} />} label="Anggaran" onClick={() => setView("budgets")} />
           <NavButton active={view === "reports"} icon={<Landmark size={19} />} label="Laporan" onClick={() => setView("reports")} />
-          <NavButton active={view === "backup"} icon={<Download size={19} />} label="Backup" onClick={() => setView("backup")} />
-          <NavButton active={view === "settings"} icon={<Settings size={19} />} label="Pengaturan" onClick={() => setView("settings")} />
+          <NavButton className="mobile-more-item" active={view === "backup"} icon={<Download size={19} />} label="Backup" onClick={() => setView("backup")} />
+          <NavButton className="mobile-more-item" active={view === "settings"} icon={<Settings size={19} />} label="Pengaturan" onClick={() => setView("settings")} />
+          <div className={`mobile-more${["wallets", "backup", "settings"].includes(view) ? " active" : ""}`} ref={moreMenuRef}>
+            <button
+              className={`nav-item${["wallets", "backup", "settings"].includes(view) ? " active" : ""}`}
+              aria-expanded={moreOpen}
+              aria-controls="mobile-more-menu"
+              aria-label="Lainnya"
+              onClick={() => setMoreOpen((open) => !open)}
+            >
+              <MoreHorizontal size={19} /><span>Lainnya</span>
+            </button>
+            {moreOpen && (
+              <nav className="more-menu" id="mobile-more-menu" aria-label="Menu lainnya">
+                <button onClick={() => selectMoreView("wallets")}><WalletCards size={18} /> Dompet</button>
+                <button onClick={() => selectMoreView("backup")}><Download size={18} /> Backup</button>
+                <button onClick={() => selectMoreView("settings")}><Settings size={18} /> Pengaturan</button>
+              </nav>
+            )}
+          </div>
         </nav>
       </aside>
 
-      <main className="main-content">
+      <main className="main-content" aria-busy={loading}>
         <header className="topbar">
           <div>
             <p className="eyebrow">Keuangan pribadi</p>
@@ -512,12 +786,21 @@ export default function Home() {
             <button className="icon-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="Ganti tema">
               {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <button className="primary-button" onClick={() => openTransaction()}><Plus size={17} /> Tambah transaksi</button>
+            <button className="primary-button add-transaction-button" aria-label="Tambah transaksi" onClick={() => openTransaction()}><Plus size={17} /> Tambah transaksi</button>
           </div>
         </header>
 
         {loading ? (
-          <div className="loading-state">Memuat data lokal...</div>
+          <div className="dashboard-skeleton" role="status" aria-label="Memuat data lokal">
+            <div className="skeleton-balance-grid" aria-hidden="true">
+              {Array.from({ length: 4 }, (_, index) => <div className="skeleton-card" key={index} />)}
+            </div>
+            <div className="skeleton-section-heading" aria-hidden="true" />
+            <div className="skeleton-rows" aria-hidden="true">
+              {Array.from({ length: 3 }, (_, index) => <div className="skeleton-row" key={index} />)}
+            </div>
+            <span className="sr-only">Memuat data lokal...</span>
+          </div>
         ) : loadError ? (
           <div className="load-error" role="alert">
             <h2>Data lokal belum bisa dibuka</h2>
@@ -533,11 +816,19 @@ export default function Home() {
                     <span>Saldo JPY</span>
                     <strong>{formatMoney(balances.JPY, "JPY")}</strong>
                     <small>{wallets.filter((wallet) => wallet.currency === "JPY").length} dompet</small>
+                    <div className="monthly-flow">
+                      <div><span>Pemasukan bulan ini</span><strong>+{formatMoney(monthlyFlows.JPY.income, "JPY")}</strong></div>
+                      <div><span>Pengeluaran bulan ini</span><strong>-{formatMoney(monthlyFlows.JPY.expense, "JPY")}</strong></div>
+                    </div>
                   </article>
                   <article className="balance-card">
                     <span>Saldo IDR</span>
                     <strong>{formatMoney(balances.IDR, "IDR")}</strong>
                     <small>{wallets.filter((wallet) => wallet.currency === "IDR").length} dompet</small>
+                    <div className="monthly-flow">
+                      <div><span>Pemasukan bulan ini</span><strong>+{formatMoney(monthlyFlows.IDR.income, "IDR")}</strong></div>
+                      <div><span>Pengeluaran bulan ini</span><strong>-{formatMoney(monthlyFlows.IDR.expense, "IDR")}</strong></div>
+                    </div>
                   </article>
                   <article className="balance-card estimate">
                     <span>Estimasi lintas mata uang</span>
@@ -547,6 +838,27 @@ export default function Home() {
                         <small>Estimasi · 1 JPY = {new Intl.NumberFormat("id-ID", { maximumFractionDigits: 4 }).format(rate.rate)} IDR</small>
                       </>
                     ) : <strong className="muted">Belum tersedia</strong>}
+                  </article>
+                  <article className="balance-card budget-summary">
+                    <span>Sisa anggaran bulan ini</span>
+                    {dashboardBudgets.length ? (
+                      <div className="budget-currency-summary">
+                        {(["JPY", "IDR"] as Currency[]).map((currency) => (
+                          <div key={currency}>
+                            <span>{currency}</span>
+                            <strong className={budgetRemainders[currency] < 0 ? "expense" : ""}>
+                              {formatMoney(budgetRemainders[currency], currency)}
+                            </strong>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <>
+                        <strong className="muted">Belum ada anggaran</strong>
+                        <button className="text-button" onClick={() => setView("budgets")}>Atur anggaran bulanan</button>
+                      </>
+                    )}
+                    {dashboardBudgets.length > 0 && <small>{dashboardBudgets.length} kategori dianggarkan</small>}
                   </article>
                 </div>
 
@@ -565,13 +877,20 @@ export default function Home() {
                 <div className="transaction-filters" aria-label="Filter transaksi">
                   <label>Jenis<select value={transactionTypeFilter} onChange={(event) => setTransactionTypeFilter(event.target.value as "all" | TransactionType)}><option value="all">Semua jenis</option><option value="income">Pemasukan</option><option value="expense">Pengeluaran</option></select></label>
                   <label>Mata uang<select value={transactionCurrencyFilter} onChange={(event) => setTransactionCurrencyFilter(event.target.value as "all" | Currency)}><option value="all">Semua mata uang</option><option value="JPY">JPY</option><option value="IDR">IDR</option></select></label>
-                  <label>Bulan<input type="month" value={transactionMonthFilter} onChange={(event) => setTransactionMonthFilter(event.target.value)} /></label>
-                  <button className="text-button" onClick={() => { setTransactionTypeFilter("all"); setTransactionCurrencyFilter("all"); setTransactionMonthFilter(""); }}>Reset filter</button>
+                  <label>Dompet<select value={transactionWalletFilter} onChange={(event) => setTransactionWalletFilter(event.target.value)}><option value="all">Semua dompet</option>{wallets.map((wallet) => <option value={wallet.id} key={wallet.id}>{wallet.name}</option>)}</select></label>
+                  <label>Kategori<select value={transactionCategoryFilter} onChange={(event) => setTransactionCategoryFilter(event.target.value)}><option value="all">Semua kategori</option>{categories.map((category) => <option value={category.id} key={category.id}>{category.name} · {category.type === "income" ? "Pemasukan" : "Pengeluaran"}</option>)}</select></label>
+                  <label>Dari tanggal<input type="date" value={transactionFromFilter} onChange={(event) => setTransactionFromFilter(event.target.value)} /></label>
+                  <label>Sampai tanggal<input type="date" value={transactionToFilter} onChange={(event) => setTransactionToFilter(event.target.value)} /></label>
+                  <label className="transaction-search">Cari catatan<input type="search" value={transactionSearch} onChange={(event) => setTransactionSearch(event.target.value)} placeholder="Kata kunci..." /></label>
+                  <div className="transaction-filter-actions">
+                    <button className="text-button" onClick={resetTransactionFilters}>Reset filter</button>
+                    <button className="secondary-button" disabled={!visibleTransactions.length} onClick={exportTransactionsCsv}><Download size={16} /> Ekspor CSV</button>
+                  </div>
                 </div>
                 {visibleTransactions.length ? (
                   <TransactionList transactions={visibleTransactions} wallets={wallets} categoryName={categoryName} walletNameFor={walletNameFor} onEdit={openTransaction} onDelete={removeTransaction} />
                 ) : transactions.length ? (
-                  <div className="empty-state"><div className="empty-icon"><ReceiptText /></div><h2>Tidak ada transaksi yang cocok</h2><button className="text-button" onClick={() => { setTransactionTypeFilter("all"); setTransactionCurrencyFilter("all"); setTransactionMonthFilter(""); }}>Hapus filter</button></div>
+                  <div className="empty-state"><div className="empty-icon"><ReceiptText /></div><h2>Tidak ada transaksi yang cocok</h2><button className="text-button" onClick={resetTransactionFilters}>Hapus filter</button></div>
                 ) : <EmptyState icon={<ReceiptText />} title="Belum ada transaksi" action="Tambah transaksi" onAction={() => openTransaction()} />}
               </section>
             )}
@@ -661,21 +980,75 @@ export default function Home() {
 
             {view === "reports" && (
               <section>
+                <div className="section-heading">
+                  <div><p className="eyebrow">Analisis terpisah per mata uang</p><h2>Laporan bulanan</h2></div>
+                  <label className="month-picker">Periode<input type="month" value={reportMonth} onChange={(event) => setReportMonth(/^\d{4}-\d{2}$/.test(event.target.value) ? event.target.value : currentMonth())} /></label>
+                </div>
                 <div className="report-grid">
                   {(["JPY", "IDR"] as Currency[]).map((currency) => {
-                    const currencyTransactions = transactions.filter((transaction) =>
-                      wallets.some((wallet) => wallet.id === transaction.walletId && wallet.currency === currency),
-                    );
-                    const income = currencyTransactions.filter((item) => item.type === "income").reduce((sum, item) => sum + item.amount, 0);
-                    const expense = currencyTransactions.filter((item) => item.type === "expense").reduce((sum, item) => sum + item.amount, 0);
+                    const { totals, previousTotals, trend, categoryTotals } = currencyReport(currency);
+                    const maxTrendValue = Math.max(1, ...trend.flatMap((item) => [item.income, item.expense]));
+                    const totalExpenses = categoryTotals.reduce((sum, item) => sum + item.amount, 0);
                     return (
-                      <article className="report-card" key={currency}>
-                        <p className="eyebrow">Laporan {currency}</p>
-                        <h2>{formatMoney(balances[currency], currency)}</h2>
-                        <div className="report-row"><span>Pemasukan</span><strong className="income">+{formatMoney(income, currency)}</strong></div>
-                        <div className="report-row"><span>Pengeluaran</span><strong className="expense">-{formatMoney(expense, currency)}</strong></div>
-                        <div className="report-bar"><span style={{ width: `${income + expense ? Math.min(100, (expense / (income + expense)) * 100) : 0}%` }} /></div>
-                      </article>
+                      <div className="currency-report" key={currency}>
+                        <article className="report-card">
+                          <p className="eyebrow">Ringkasan {currency} · {reportMonth}</p>
+                          <h2>{formatMoney(totals.income - totals.expense, currency)}</h2>
+                          <p className="report-caption">Arus kas bersih</p>
+                          <div className="report-row"><span>Pemasukan</span><strong className="income">+{formatMoney(totals.income, currency)}</strong></div>
+                          <div className="report-row"><span>Pengeluaran</span><strong className="expense">-{formatMoney(totals.expense, currency)}</strong></div>
+                          <div className="report-comparison">
+                            <span>vs. {shiftMonth(reportMonth, -1)}</span>
+                            <span>Pemasukan <strong>{totals.income - previousTotals.income >= 0 ? "+" : "−"}{formatMoney(Math.abs(totals.income - previousTotals.income), currency)}</strong></span>
+                            <span>Pengeluaran <strong>{totals.expense - previousTotals.expense >= 0 ? "+" : "−"}{formatMoney(Math.abs(totals.expense - previousTotals.expense), currency)}</strong></span>
+                          </div>
+                        </article>
+                        <article className="report-card">
+                          <h3>Tren enam bulan · {currency}</h3>
+                          <div className="trend-chart" aria-hidden="true">
+                            {trend.map((item) => (
+                              <div className="trend-column" key={item.month}>
+                                <div className="trend-bar-pair">
+                                  <span className="income-bar" style={{ height: `${item.income / maxTrendValue * 100}%` }} />
+                                  <span className="expense-bar" style={{ height: `${item.expense / maxTrendValue * 100}%` }} />
+                                </div>
+                                <span>{reportMonthLabel(item.month)}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="trend-legend"><span className="income">Pemasukan</span><span className="expense">Pengeluaran</span></div>
+                          <table className="report-table">
+                            <caption>Rincian tren {currency}</caption>
+                            <thead><tr><th>Bulan</th><th>Pemasukan</th><th>Pengeluaran</th></tr></thead>
+                            <tbody>{trend.map((item) => <tr key={item.month}><th scope="row">{item.month}</th><td>{formatMoney(item.income, currency)}</td><td>{formatMoney(item.expense, currency)}</td></tr>)}</tbody>
+                          </table>
+                        </article>
+                        <article className="report-card">
+                          <h3>Pengeluaran per kategori</h3>
+                          <p className="report-caption">{reportMonth} · {currency}</p>
+                          {categoryTotals.length ? (
+                            <>
+                              <div className="distribution-list">
+                                {categoryTotals.map(({ category, amount }) => {
+                                  const percent = totalExpenses ? Math.round(amount / totalExpenses * 100) : 0;
+                                  const Icon = CATEGORY_ICONS[category.icon ?? "tag"];
+                                  return (
+                                    <div className="distribution-item" key={category.id}>
+                                      <div className="distribution-heading"><span><Icon size={16} />{category.name}</span><strong>{formatMoney(amount, currency)} <small>{percent}%</small></strong></div>
+                                      <div className="distribution-bar" role="progressbar" aria-label={`${category.name}, ${percent}% dari pengeluaran`} aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percent}%` }} /></div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <table className="report-table">
+                                <caption>Rincian kategori pengeluaran {currency}</caption>
+                                <thead><tr><th>Kategori</th><th>Nominal</th><th>Persentase</th></tr></thead>
+                                <tbody>{categoryTotals.map(({ category, amount }) => <tr key={category.id}><th scope="row">{category.name}</th><td>{formatMoney(amount, currency)}</td><td>{totalExpenses ? Math.round(amount / totalExpenses * 100) : 0}%</td></tr>)}</tbody>
+                              </table>
+                            </>
+                          ) : <p className="report-caption">Belum ada pengeluaran pada periode ini.</p>}
+                        </article>
+                      </div>
                     );
                   })}
                 </div>
@@ -720,6 +1093,25 @@ export default function Home() {
                   {rate ? <p>1 JPY = {new Intl.NumberFormat("id-ID", { maximumFractionDigits: 4 }).format(rate.rate)} IDR<br /><small>Diperbarui {new Date(rate.cachedAt).toLocaleString("id-ID")}</small></p> : <p>Kurs belum tersedia. Estimasi lintas mata uang akan disembunyikan.</p>}
                   <button className="secondary-button" onClick={() => void fetchRate(true)}>Perbarui kurs</button>
                 </article>
+                <article className="settings-card category-settings">
+                  <div className="section-heading">
+                    <div><h2>Kategori</h2><p>Kelola kategori pemasukan dan pengeluaran.</p></div>
+                    <button className="primary-button" onClick={() => openCategory()}><Plus size={17} /> Kategori</button>
+                  </div>
+                  <div className="category-list">
+                    {categories.map((category) => {
+                      const Icon = CATEGORY_ICONS[category.icon ?? "tag"];
+                      return (
+                        <div className="category-row" key={category.id}>
+                          <span className="category-icon"><Icon size={17} /></span>
+                          <span className="category-row-name">{category.name}<small>{category.type === "income" ? "Pemasukan" : "Pengeluaran"}</small></span>
+                          <button className="icon-button" onClick={() => openCategory(category)} aria-label={`Edit kategori ${category.name}`}><Pencil size={16} /></button>
+                          <button className="icon-button danger" onClick={() => void removeCategory(category)} aria-label={`Hapus kategori ${category.name}`}><Trash2 size={16} /></button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </article>
               </section>
             )}
           </>
@@ -731,7 +1123,9 @@ export default function Home() {
           <div ref={modalRef} className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <div className="modal-heading">
               <h2 id="modal-title">
-                {modal === "budget"
+                {modal === "category"
+                  ? editingCategory ? "Edit kategori" : "Kategori baru"
+                  : modal === "budget"
                   ? editingBudget ? "Edit anggaran" : "Anggaran baru"
                   : modal === "wallet"
                     ? editingWallet ? "Edit dompet" : "Dompet baru"
@@ -739,7 +1133,14 @@ export default function Home() {
               </h2>
               <button className="icon-button" onClick={() => setModal(null)} aria-label="Tutup"><X size={18} /></button>
             </div>
-            {modal === "budget" ? (
+            {modal === "category" ? (
+              <form onSubmit={saveCategory}>
+                <label>Nama kategori<input value={categoryNameInput} maxLength={40} onChange={(event) => setCategoryNameInput(event.target.value)} placeholder="Contoh: Transportasi" /></label>
+                <label>Jenis kategori<select value={categoryTypeInput} onChange={(event) => setCategoryTypeInput(event.target.value as TransactionType)}><option value="income">Pemasukan</option><option value="expense">Pengeluaran</option></select></label>
+                <label>Ikon kategori<select value={categoryIconInput} onChange={(event) => setCategoryIconInput(event.target.value as CategoryIconId)}>{CATEGORY_ICON_OPTIONS.map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select></label>
+                <button className="primary-button wide" type="submit">{editingCategory ? "Simpan perubahan" : "Simpan kategori"}</button>
+              </form>
+            ) : modal === "budget" ? (
               <form onSubmit={saveBudget}>
                 <label>Dompet<select value={budgetWallet} onChange={(event) => setBudgetWallet(event.target.value)}>{wallets.map((wallet) => <option value={wallet.id} key={wallet.id}>{wallet.name} ({wallet.currency})</option>)}</select></label>
                 <label>Kategori pengeluaran<select value={budgetCategory} onChange={(event) => setBudgetCategory(event.target.value)}>{categories.filter((category) => category.type === "expense").map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>
@@ -776,8 +1177,20 @@ export default function Home() {
   );
 }
 
-function NavButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
-  return <button className={active ? "nav-item active" : "nav-item"} onClick={onClick}>{icon}<span>{label}</span></button>;
+function NavButton({
+  active,
+  icon,
+  label,
+  onClick,
+  className,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  className?: string;
+}) {
+  return <button className={`${active ? "nav-item active" : "nav-item"}${className ? ` ${className}` : ""}`} aria-label={label} onClick={onClick}>{icon}<span>{label}</span></button>;
 }
 
 function EmptyState({ icon, title, action, onAction }: { icon: React.ReactNode; title: string; action: string; onAction: () => void }) {

@@ -122,6 +122,9 @@ export async function putCategories(categories: Category[]) {
   await Promise.all(categories.map((category) => tx.store.put(category)));
   await tx.done;
 }
+export async function deleteCategory(id: string) {
+  return (await getDb()).delete("categories", id);
+}
 
 export async function getExchangeRate() {
   return (await getDb()).get("exchangeRate", "JPY_IDR");

@@ -32,6 +32,16 @@ describe("backup validation", () => {
     expect(validateBackup(backup).budgets).toEqual([]);
   });
 
+  it("accepts older categories without icons and rejects unknown icons", () => {
+    expect(validateBackup(backup).categories[0]).not.toHaveProperty("icon");
+    const invalid = {
+      ...backup,
+      categories: [{ ...backup.categories[0], icon: "unknown-icon" }],
+    };
+
+    expect(() => validateBackup(invalid)).toThrow();
+  });
+
   it("rejects orphaned transactions without changing input", () => {
     const invalid = {
       ...backup,

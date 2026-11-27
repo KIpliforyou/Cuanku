@@ -9,6 +9,8 @@ export type BudgetTransaction = {
   date: string;
 };
 
+export type PeriodTransaction = Pick<BudgetTransaction, "amount" | "type" | "date">;
+
 export type Wallet = {
   id: string;
   name?: string;
@@ -85,6 +87,21 @@ export function calculateBudgetSpent(
       transaction.date.startsWith(budget.month),
     )
     .reduce((total, transaction) => total + transaction.amount, 0);
+}
+
+export function calculateMonthlyTotals(
+  transactions: PeriodTransaction[],
+  month: string,
+): { income: number; expense: number } {
+  return transactions
+    .filter((transaction) => transaction.date.startsWith(month))
+    .reduce(
+      (totals, transaction) => {
+        totals[transaction.type] += transaction.amount;
+        return totals;
+      },
+      { income: 0, expense: 0 },
+    );
 }
 
 export function formatMoney(amount: number, currency: Currency): string {
