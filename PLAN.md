@@ -1,6 +1,6 @@
 # Cuanku Development Plan
 
-Status: Draft — menunggu persetujuan pengguna
+Status: Fase 8–13 diimplementasikan dan quality gates lulus; deployment dilakukan setelah push.
 
 ## 1. Tujuan
 
@@ -351,16 +351,33 @@ Fase 6–7 dirilis bersama pada commit `2cbc064`.
 - Ekspor/impor manual tetap menjadi jalur pemulihan utama. Backup otomatis berbasis File System Access API ditunda sampai izin dan dukungan browser dirancang.
 - Status: implementasi dan validasi selesai; typecheck, lint, build, 23 tes, audit dependency (0 kerentanan), dan smoke test UI mobile lolos.
 
-#### Fase 8 — Kurs JPY ↔ IDR
-- Riwayat dan kurs manual/otomatis; estimasi gabungan selalu menyebut kurs dan tanggal.
+#### Fase 8 — Kurs JPY ↔ IDR (diimplementasikan)
+- Simpan riwayat kurs manual dan API serta gunakan kurs tersimpan untuk estimasi.
+- Gunakan nilai berskala integer dan pembulatan eksplisit untuk konversi.
+- Estimasi menampilkan mata uang tujuan, kurs, sumber, dan tanggal.
 
-#### Fase 9 — Transfer Antar-Dompet
-- Transfer biasa hanya antar dompet bermata uang sama; biaya admin dibebankan terpisah ke dompet asal dan masuk pengeluaran “Biaya transfer”.
-- Konversi lintas mata uang merupakan alur terpisah yang membutuhkan kurs eksplisit.
+#### Fase 9 — Transfer Antar-Dompet (diimplementasikan)
+- Transfer biasa dibatasi ke dompet bermata uang sama.
+- Konversi lintas mata uang memakai alur berbeda, kurs eksplisit, dan snapshot kurs.
+- Biaya admin dicatat atomik sebagai pengeluaran pada dompet asal dan kategori “Biaya transfer”.
+- Transfer dan konversi tidak dimasukkan sebagai pemasukan/pengeluaran laporan.
 
-#### Fase 10–18 — Pencatatan dan Fitur Lanjutan
-- Fase 10 transaksi berulang; Fase 11 peringatan anggaran; Fase 13 PWA; Fase 14 PIN; Fase 15 target tabungan; Fase 16 remitansi; Fase 17 utang/piutang; Fase 18 tag, lampiran struk, dan pencarian lanjut.
-- Terapkan tes migrasi, perlindungan data lokal, dan review model data sebelum menambah entitas.
+#### Fase 10 — Transaksi Berulang (diimplementasikan)
+- Aturan mingguan, bulanan, dan tahunan menghasilkan draf saat jadwal jatuh tempo.
+- Setiap draf harus disetujui satu per satu sebelum menjadi transaksi dan memengaruhi saldo.
+- Persetujuan transaksi dan penghapusan draf dilakukan secara atomik; draf dapat dilewati.
+
+#### Fase 11 — Peringatan Anggaran (diimplementasikan)
+- Ambang 80% dan 100% dapat diatur per anggaran.
+- Tampilkan tingkat penggunaan pada anggaran dan dashboard.
+- Notifikasi hanya muncul saat transaksi melewati ambang; klaim notifikasi disimpan lokal per periode agar tidak berulang.
+
+#### Fase 13 — PWA (diimplementasikan)
+- Tambahkan manifest, ikon aplikasi, petunjuk pemasangan, status koneksi, dan fallback offline.
+- Cache app shell dan aset statis; pengecekan pembaruan tidak memaksa reload.
+- Pembaruan baru diterapkan atas tindakan pengguna, dan aksi ditahan selama form masih terbuka.
+
+Fase 14–18 tetap berada di luar lingkup pekerjaan ini. Setiap perubahan pada entitas keuangan harus mempertahankan migrasi backup, operasi IndexedDB atomik, dan tes invariant.
 
 ## 12. Quality Gates
 

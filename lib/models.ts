@@ -44,6 +44,8 @@ export type TransactionRecord = {
   categoryId: string;
   date: string;
   note?: string;
+  transferId?: string;
+  recurringRuleId?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -54,9 +56,13 @@ export type BudgetRecord = {
   categoryId: string;
   month: string;
   amount: number;
+  alertThresholds?: BudgetAlertThreshold[];
   createdAt: string;
   updatedAt: string;
 };
+
+export const BUDGET_ALERT_THRESHOLDS = [80, 100] as const;
+export type BudgetAlertThreshold = (typeof BUDGET_ALERT_THRESHOLDS)[number];
 
 export type ExchangeRateCache = {
   id: "JPY_IDR";
@@ -68,21 +74,90 @@ export type ExchangeRateCache = {
   cachedAt: string;
 };
 
+export type ExchangeRateSource = "manual" | "api";
+
+export type ExchangeRateHistoryRecord = {
+  id: string;
+  date: string;
+  rateScaled: number;
+  source: ExchangeRateSource;
+  provider?: string;
+  createdAt: string;
+};
+
+export type ExchangeRateSnapshot = {
+  date: string;
+  rateScaled: number;
+  source: ExchangeRateSource;
+};
+
+export type TransferRecord = {
+  id: string;
+  kind: "transfer" | "conversion";
+  date: string;
+  fromWalletId: string;
+  toWalletId: string;
+  fromAmount: number;
+  toAmount: number;
+  feeAmount: number;
+  rate?: ExchangeRateSnapshot;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RecurringFrequency = "weekly" | "monthly" | "yearly";
+
+export type RecurringRule = {
+  id: string;
+  walletId: string;
+  type: TransactionType;
+  amount: number;
+  categoryId: string;
+  note?: string;
+  frequency: RecurringFrequency;
+  startDate: string;
+  endDate?: string;
+  dayOfMonth?: number;
+  active: boolean;
+  lastGeneratedDate?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RecurringDraft = {
+  id: string;
+  ruleId: string;
+  walletId: string;
+  type: TransactionType;
+  amount: number;
+  categoryId: string;
+  date: string;
+  note?: string;
+  createdAt: string;
+};
+
 export const BACKUP_REMINDER_OPTIONS = [7, 14, 30] as const;
 export type BackupReminderDays = (typeof BACKUP_REMINDER_OPTIONS)[number];
 
 export type Preferences = {
   theme: "light" | "dark" | "system";
   backupReminderDays?: BackupReminderDays;
+  displayCurrency?: Currency;
+  showEquivalentInReports?: boolean;
 };
 
 export type BackupEnvelope = {
-  schemaVersion: 2;
+  schemaVersion: 7;
   exportedAt: string;
   app: "Cuanku";
   wallets: WalletRecord[];
   transactions: TransactionRecord[];
   categories: Category[];
   budgets: BudgetRecord[];
+  exchangeRateHistory: ExchangeRateHistoryRecord[];
+  transfers: TransferRecord[];
+  recurringRules: RecurringRule[];
+  recurringDrafts: RecurringDraft[];
   preferences?: Preferences;
 };

@@ -36,5 +36,6 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: "expense-education", name: "Pendidikan", type: "expense", icon: "book" },
   { id: "expense-insurance", name: "Asuransi & Pajak", type: "expense", icon: "shield" },
   { id: "expense-entertainment", name: "Hiburan", type: "expense", icon: "sparkles" },
+  { id: "expense-transfer-fee", name: "Biaya transfer", type: "expense", icon: "receipt" },
   { id: "expense-other", name: "Lainnya", type: "expense", icon: "tag" },
 ];

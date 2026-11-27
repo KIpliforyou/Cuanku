@@ -33,6 +33,18 @@ describe("domain balance calculations", () => {
     });
   });
 
+  it("applies transfers to each wallet without counting them as income or expense", () => {
+    const sameCurrencyWallets: Wallet[] = [
+      { id: "from", currency: "JPY", openingBalance: 1000 },
+      { id: "to", currency: "JPY", openingBalance: 100 },
+    ];
+    const transfer = [{ fromWalletId: "from", toWalletId: "to", fromAmount: 300, toAmount: 300 }];
+    const fee = [{ walletId: "from", type: "expense" as const, amount: 10 }];
+
+    expect(calculateCurrencyBalances(sameCurrencyWallets, [], transfer)).toEqual({ JPY: 1100, IDR: 0 });
+    expect(calculateCurrencyBalances(sameCurrencyWallets, fee, transfer)).toEqual({ JPY: 1090, IDR: 0 });
+  });
+
   it("calculates estimated total in IDR using JPY rate", () => {
     expect(
       calculateEstimatedTotalInIdr({ JPY: 1300, IDR: 400000 }, 108.42),

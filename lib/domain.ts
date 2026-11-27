@@ -1,3 +1,5 @@
+import { convertAmount } from "./exchange-rate";
+
 export type Currency = "JPY" | "IDR";
 export type TransactionType = "income" | "expense";
 
@@ -32,26 +34,45 @@ export type Transaction = {
   updatedAt?: string;
 };
 
-export function calculateWalletBalance(wallet: Wallet, transactions: Transaction[]): number {
-  return wallet.openingBalance + transactions
+export type WalletTransfer = {
+  fromWalletId: string;
+  toWalletId: string;
+  fromAmount: number;
+  toAmount: number;
+};
+
+export function calculateWalletBalance(
+  wallet: Wallet,
+  transactions: Transaction[],
+  transfers: WalletTransfer[] = [],
+): number {
+  const transactionBalance = transactions
     .filter((transaction) => transaction.walletId === wallet.id)
     .reduce(
       (balance, transaction) => balance + (transaction.type === "income" ? transaction.amount : -transaction.amount),
       0,
     );
+  const transferBalance = transfers.reduce(
+    (balance, transfer) => balance +
+      (transfer.toWalletId === wallet.id ? transfer.toAmount : 0) -
+      (transfer.fromWalletId === wallet.id ? transfer.fromAmount : 0),
+    0,
+  );
+  return wallet.openingBalance + transactionBalance + transferBalance;
 }
 
 export function calculateCurrencyBalances(
   wallets: Wallet[],
   transactions: Transaction[],
+  transfers: WalletTransfer[] = [],
 ): Record<Currency, number> {
   return {
     JPY: wallets
       .filter((wallet) => wallet.currency === "JPY")
-      .reduce((total, wallet) => total + calculateWalletBalance(wallet, transactions), 0),
+      .reduce((total, wallet) => total + calculateWalletBalance(wallet, transactions, transfers), 0),
     IDR: wallets
       .filter((wallet) => wallet.currency === "IDR")
-      .reduce((total, wallet) => total + calculateWalletBalance(wallet, transactions), 0),
+      .reduce((total, wallet) => total + calculateWalletBalance(wallet, transactions, transfers), 0),
   };
 }
 
@@ -62,7 +83,12 @@ export function calculateEstimatedTotalInIdr(
   if (!Number.isFinite(jpyToIdr) || jpyToIdr <= 0) {
     throw new Error("Exchange rate must be a positive finite number");
   }
-  return balances.IDR + balances.JPY * jpyToIdr;
+  return balances.IDR + convertAmount(
+    balances.JPY,
+    "JPY",
+    "IDR",
+    Math.round(jpyToIdr * 10_000),
+  );
 }
 
 export function calculateEstimatedTotalInJpy(
@@ -72,7 +98,12 @@ export function calculateEstimatedTotalInJpy(
   if (!Number.isFinite(jpyToIdr) || jpyToIdr <= 0) {
     throw new Error("Exchange rate must be a positive finite number");
   }
-  return balances.JPY + balances.IDR / jpyToIdr;
+  return balances.JPY + convertAmount(
+    balances.IDR,
+    "IDR",
+    "JPY",
+    Math.round(jpyToIdr * 10_000),
+  );
 }
 
 export function calculateBudgetSpent(

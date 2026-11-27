@@ -29,14 +29,22 @@ const backup = {
 describe("backup validation", () => {
   it("migrates a valid version 1 backup without losing transactions", () => {
     const migrated = validateBackup(backup);
-    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.schemaVersion).toBe(7);
     expect(migrated.transactions).toEqual(backup.transactions);
     expect(migrated.budgets).toEqual([]);
+    expect(migrated.exchangeRateHistory).toEqual([]);
+    expect(migrated.transfers).toEqual([]);
+    expect(migrated.recurringRules).toEqual([]);
   });
 
   it("adds the default reminder interval when migrating legacy preferences", () => {
     const migrated = validateBackup({ ...backup, preferences: { theme: "dark" } });
-    expect(migrated.preferences).toEqual({ theme: "dark", backupReminderDays: 14 });
+    expect(migrated.preferences).toEqual({
+      theme: "dark",
+      backupReminderDays: 14,
+      displayCurrency: "IDR",
+      showEquivalentInReports: false,
+    });
   });
 
   it("accepts older categories without icons and rejects unknown icons", () => {
@@ -52,7 +60,7 @@ describe("backup validation", () => {
   it("preserves current backup preferences and budgets", () => {
     const current = validateBackup({
       ...backup,
-      schemaVersion: 2,
+      schemaVersion: 7,
       budgets: [{
         id: "budget-1",
         walletId: "wallet-1",
@@ -62,11 +70,105 @@ describe("backup validation", () => {
         createdAt: "2026-11-01T00:00:00.000Z",
         updatedAt: "2026-11-01T00:00:00.000Z",
       }],
-      preferences: { theme: "dark", backupReminderDays: 30 },
+      exchangeRateHistory: [],
+      transfers: [],
+      recurringRules: [],
+      recurringDrafts: [],
+      preferences: {
+        theme: "dark",
+        backupReminderDays: 30,
+        displayCurrency: "JPY",
+        showEquivalentInReports: true,
+      },
     });
 
-    expect(current.preferences).toEqual({ theme: "dark", backupReminderDays: 30 });
+    expect(current.preferences).toEqual({
+      theme: "dark",
+      backupReminderDays: 30,
+      displayCurrency: "JPY",
+      showEquivalentInReports: true,
+    });
     expect(current.budgets).toHaveLength(1);
+  });
+
+  it("migrates version 6 transfers to same-currency transfers", () => {
+    const migrated = validateBackup({
+      ...backup,
+      schemaVersion: 6,
+      budgets: [],
+      exchangeRateHistory: [],
+      transfers: [{
+        id: "transfer-1",
+        date: "2026-11-27",
+        fromWalletId: "wallet-1",
+        toWalletId: "wallet-3",
+        fromAmount: 100,
+        toAmount: 100,
+        feeAmount: 0,
+        createdAt: "2026-11-27T00:00:00.000Z",
+        updatedAt: "2026-11-27T00:00:00.000Z",
+      }, {
+        id: "conversion-1",
+        date: "2026-11-27",
+        fromWalletId: "wallet-1",
+        toWalletId: "wallet-2",
+        fromAmount: 1000,
+        toAmount: 150000,
+        feeAmount: 0,
+        rate: { date: "2026-11-27", rateScaled: 1_500_000, source: "manual" },
+        createdAt: "2026-11-27T00:00:00.000Z",
+        updatedAt: "2026-11-27T00:00:00.000Z",
+      }],
+      recurringRules: [],
+      recurringDrafts: [],
+      wallets: [
+        backup.wallets[0],
+        { ...backup.wallets[0], id: "wallet-2", currency: "IDR" as const },
+        { ...backup.wallets[0], id: "wallet-3" },
+      ],
+    });
+
+    expect(migrated.transfers.map((transfer) => transfer.kind)).toEqual(["transfer", "conversion"]);
+  });
+
+  it("requires matching currencies for transfers and an accurate snapshot for conversions", () => {
+    const wallets = [
+      backup.wallets[0],
+      { ...backup.wallets[0], id: "idr-wallet", currency: "IDR" as const },
+    ];
+    const base = {
+      ...backup,
+      schemaVersion: 7,
+      wallets,
+      transactions: [],
+      budgets: [],
+      exchangeRateHistory: [],
+      recurringRules: [],
+      recurringDrafts: [],
+    };
+    const conversion = {
+      id: "conversion-1",
+      kind: "conversion",
+      date: "2026-11-27",
+      fromWalletId: "wallet-1",
+      toWalletId: "idr-wallet",
+      fromAmount: 1000,
+      toAmount: 150000,
+      feeAmount: 0,
+      rate: { date: "2026-11-27", rateScaled: 1_500_000, source: "manual" },
+      createdAt: "2026-11-27T00:00:00.000Z",
+      updatedAt: "2026-11-27T00:00:00.000Z",
+    };
+
+    expect(validateBackup({ ...base, transfers: [conversion] }).transfers[0].kind).toBe("conversion");
+    expect(() => validateBackup({
+      ...base,
+      transfers: [{ ...conversion, kind: "transfer", rate: undefined }],
+    })).toThrow(/same currency/i);
+    expect(() => validateBackup({
+      ...base,
+      transfers: [{ ...conversion, toAmount: 149999 }],
+    })).toThrow(/saved exchange rate/i);
   });
 
   it("rejects unsupported backup versions with a clear error", () => {
@@ -118,7 +220,9 @@ describe("backup validation", () => {
       }],
     };
 
-    expect(validateBackup(valid).budgets).toEqual(valid.budgets);
+    expect(validateBackup(valid).budgets).toMatchObject([
+      { ...valid.budgets[0], alertThresholds: [80, 100] },
+    ]);
   });
 
   it("rejects a budget linked to a missing wallet", () => {
