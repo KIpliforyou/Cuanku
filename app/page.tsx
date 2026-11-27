@@ -1,14 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
   Download,
-  Ellipsis,
   Landmark,
   LayoutDashboard,
   Moon,
+  Pencil,
   Plus,
   ReceiptText,
   Settings,
@@ -55,11 +55,18 @@ export default function Home() {
   const [view, setView] = useState<View>("dashboard");
   const [wallets, setWallets] = useState<WalletRecord[]>([]);
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [rate, setRate] = useState<ExchangeRateCache | null>(null);
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<Preferences["theme"]>("system");
+  const [themeLoaded, setThemeLoaded] = useState(false);
   const [modal, setModal] = useState<"wallet" | "transaction" | null>(null);
   const [toast, setToast] = useState("");
+  const [editingWallet, setEditingWallet] = useState<WalletRecord | null>(null);
+  const [editingTransaction, setEditingTransaction] = useState<TransactionRecord | null>(null);
+  const [transactionTypeFilter, setTransactionTypeFilter] = useState<"all" | TransactionType>("all");
+  const [transactionCurrencyFilter, setTransactionCurrencyFilter] = useState<"all" | Currency>("all");
+  const [transactionMonthFilter, setTransactionMonthFilter] = useState("");
 
   const [walletName, setWalletName] = useState("");
   const [walletCurrency, setWalletCurrency] = useState<Currency>("IDR");
@@ -71,6 +78,7 @@ export default function Home() {
   const [transactionCategory, setTransactionCategory] = useState("");
   const [transactionDate, setTransactionDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [transactionNote, setTransactionNote] = useState("");
+  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function load() {
@@ -86,6 +94,7 @@ export default function Home() {
         }
         setWallets(storedWallets);
         setTransactions(storedTransactions);
+        setCategories(storedCategories.length ? storedCategories : DEFAULT_CATEGORIES);
         setRate(storedRate ?? null);
         const savedTheme = localStorage.getItem("cuanku-theme");
         if (savedTheme === "light" || savedTheme === "dark" || savedTheme === "system") {
@@ -94,6 +103,7 @@ export default function Home() {
       } catch {
         setToast("Penyimpanan browser tidak tersedia");
       } finally {
+        setThemeLoaded(true);
         setLoading(false);
       }
     }
@@ -102,8 +112,8 @@ export default function Home() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("cuanku-theme", theme);
-  }, [theme]);
+    if (themeLoaded) localStorage.setItem("cuanku-theme", theme);
+  }, [theme, themeLoaded]);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -116,6 +126,35 @@ export default function Home() {
     const timeout = window.setTimeout(() => setToast(""), 3000);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  useEffect(() => {
+    if (!modal) return;
+    const dialog = modalRef.current;
+    const focusable = dialog?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    focusable?.[0]?.focus();
+
+    function trapFocus(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setModal(null);
+        return;
+      }
+      if (event.key !== "Tab" || !focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    window.addEventListener("keydown", trapFocus);
+    return () => window.removeEventListener("keydown", trapFocus);
+  }, [modal]);
 
   const domainWallets = wallets.map((wallet) => ({
     id: wallet.id,
@@ -136,27 +175,40 @@ export default function Home() {
     setTransactions(await getTransactions());
   }
 
+  function openWallet(wallet?: WalletRecord) {
+    setEditingWallet(wallet ?? null);
+    setWalletName(wallet?.name ?? "");
+    setWalletCurrency(wallet?.currency ?? "IDR");
+    setOpeningBalance(wallet ? String(wallet.openingBalance) : "");
+    setModal("wallet");
+  }
+
   async function saveWallet(event: React.FormEvent) {
     event.preventDefault();
     const amount = Number(openingBalance || 0);
-    if (!walletName.trim() || !Number.isInteger(amount) || amount < 0) {
+    if (!walletName.trim() || !Number.isSafeInteger(amount) || amount < 0) {
       setToast("Lengkapi nama dan saldo awal");
       return;
     }
     const now = new Date().toISOString();
-    await putWallet({
-      id: makeId(),
-      name: walletName.trim(),
-      currency: walletCurrency,
-      openingBalance: amount,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await refreshWallets();
-    setWalletName("");
-    setOpeningBalance("");
-    setModal(null);
-    setToast("Dompet berhasil ditambahkan");
+    try {
+      await putWallet({
+        id: editingWallet?.id ?? makeId(),
+        name: walletName.trim(),
+        currency: editingWallet?.currency ?? walletCurrency,
+        openingBalance: amount,
+        createdAt: editingWallet?.createdAt ?? now,
+        updatedAt: now,
+      });
+      await refreshWallets();
+      setWalletName("");
+      setOpeningBalance("");
+      setEditingWallet(null);
+      setModal(null);
+      setToast(editingWallet ? "Dompet berhasil diperbarui" : "Dompet berhasil ditambahkan");
+    } catch {
+      setToast("Dompet gagal disimpan. Coba lagi.");
+    }
   }
 
   async function removeWallet(wallet: WalletRecord) {
@@ -165,55 +217,75 @@ export default function Home() {
       return;
     }
     if (!window.confirm(`Hapus dompet ${wallet.name}?`)) return;
-    await deleteWallet(wallet.id);
-    await refreshWallets();
-    setToast("Dompet berhasil dihapus");
+    try {
+      await deleteWallet(wallet.id);
+      await refreshWallets();
+      setToast("Dompet berhasil dihapus");
+    } catch {
+      setToast("Dompet gagal dihapus. Coba lagi.");
+    }
   }
 
-  function openTransaction() {
+  function openTransaction(transaction?: TransactionRecord) {
     if (wallets.length === 0) {
       setView("wallets");
       setToast("Tambahkan dompet terlebih dahulu");
       return;
     }
-    setTransactionWallet(wallets[0].id);
+    setEditingTransaction(transaction ?? null);
+    setTransactionType(transaction?.type ?? "expense");
+    setTransactionWallet(transaction?.walletId ?? wallets[0].id);
     setTransactionCategory(
-      DEFAULT_CATEGORIES.find((category) => category.type === transactionType)?.id ?? "",
+      transaction?.categoryId ??
+        categories.find((category) => category.type === (transaction?.type ?? transactionType))?.id ??
+        "",
     );
+    setTransactionAmount(transaction ? String(transaction.amount) : "");
+    setTransactionDate(transaction?.date.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
+    setTransactionNote(transaction?.note ?? "");
     setModal("transaction");
   }
 
   async function saveTransaction(event: React.FormEvent) {
     event.preventDefault();
     const amount = Number(transactionAmount);
-    if (!transactionWallet || !transactionCategory || !Number.isInteger(amount) || amount <= 0) {
+    if (!transactionWallet || !transactionCategory || !Number.isSafeInteger(amount) || amount <= 0) {
       setToast("Lengkapi seluruh kolom transaksi");
       return;
     }
     const now = new Date().toISOString();
-    await putTransaction({
-      id: makeId(),
-      walletId: transactionWallet,
-      type: transactionType,
-      amount,
-      categoryId: transactionCategory,
-      date: new Date(`${transactionDate}T12:00:00.000Z`).toISOString(),
-      note: transactionNote.trim() || undefined,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await refreshTransactions();
-    setTransactionAmount("");
-    setTransactionNote("");
-    setModal(null);
-    setToast("Transaksi berhasil disimpan");
+    try {
+      await putTransaction({
+        id: editingTransaction?.id ?? makeId(),
+        walletId: transactionWallet,
+        type: transactionType,
+        amount,
+        categoryId: transactionCategory,
+        date: new Date(`${transactionDate}T12:00:00.000Z`).toISOString(),
+        note: transactionNote.trim() || undefined,
+        createdAt: editingTransaction?.createdAt ?? now,
+        updatedAt: now,
+      });
+      await refreshTransactions();
+      setTransactionAmount("");
+      setTransactionNote("");
+      setEditingTransaction(null);
+      setModal(null);
+      setToast(editingTransaction ? "Transaksi berhasil diperbarui" : "Transaksi berhasil disimpan");
+    } catch {
+      setToast("Transaksi gagal disimpan. Coba lagi.");
+    }
   }
 
   async function removeTransaction(transaction: TransactionRecord) {
     if (!window.confirm("Hapus transaksi ini?")) return;
-    await deleteTransaction(transaction.id);
-    await refreshTransactions();
-    setToast("Transaksi berhasil dihapus");
+    try {
+      await deleteTransaction(transaction.id);
+      await refreshTransactions();
+      setToast("Transaksi berhasil dihapus");
+    } catch {
+      setToast("Transaksi gagal dihapus. Coba lagi.");
+    }
   }
 
   const fetchRate = useCallback(async (force = false) => {
@@ -249,7 +321,7 @@ export default function Home() {
       app: "Cuanku",
       wallets,
       transactions,
-      categories: DEFAULT_CATEGORIES,
+      categories,
       preferences: { theme },
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
@@ -272,6 +344,8 @@ export default function Home() {
       });
       await refreshWallets();
       await refreshTransactions();
+      setCategories(backup.categories);
+      if (backup.preferences) setTheme(backup.preferences.theme);
       setToast("Backup berhasil dipulihkan");
     } catch (error) {
       setToast(error instanceof Error ? error.message : "File backup tidak valid");
@@ -283,14 +357,22 @@ export default function Home() {
     await replaceAllData({ wallets: [], transactions: [], categories: DEFAULT_CATEGORIES });
     await refreshWallets();
     await refreshTransactions();
+    setCategories(DEFAULT_CATEGORIES);
     setToast("Seluruh data berhasil dihapus");
   }
 
   const categoryName = (id: string) =>
-    DEFAULT_CATEGORIES.find((category) => category.id === id)?.name ?? "Lainnya";
+    categories.find((category) => category.id === id)?.name ?? "Lainnya";
   const walletNameFor = (id: string) =>
     wallets.find((wallet) => wallet.id === id)?.name ?? "Dompet";
   const sortedTransactions = [...transactions].sort((a, b) => b.date.localeCompare(a.date));
+  const visibleTransactions = sortedTransactions.filter((transaction) => {
+    const wallet = wallets.find((item) => item.id === transaction.walletId);
+    const matchesType = transactionTypeFilter === "all" || transaction.type === transactionTypeFilter;
+    const matchesCurrency = transactionCurrencyFilter === "all" || wallet?.currency === transactionCurrencyFilter;
+    const matchesMonth = !transactionMonthFilter || transaction.date.startsWith(transactionMonthFilter);
+    return matchesType && matchesCurrency && matchesMonth;
+  });
 
   return (
     <div className="app-shell">
@@ -326,7 +408,7 @@ export default function Home() {
             <button className="icon-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="Ganti tema">
               {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <button className="primary-button" onClick={openTransaction}><Plus size={17} /> Tambah transaksi</button>
+            <button className="primary-button" onClick={() => openTransaction()}><Plus size={17} /> Tambah transaksi</button>
           </div>
         </header>
 
@@ -363,16 +445,24 @@ export default function Home() {
                   <button className="text-button" onClick={() => setView("transactions")}>Lihat semua</button>
                 </div>
                 {sortedTransactions.length ? (
-                  <TransactionList transactions={sortedTransactions.slice(0, 8)} wallets={wallets} categoryName={categoryName} walletNameFor={walletNameFor} onDelete={removeTransaction} />
-                ) : <EmptyState icon={<ReceiptText />} title="Belum ada transaksi" action="Catat transaksi pertama" onAction={openTransaction} />}
+                  <TransactionList transactions={sortedTransactions.slice(0, 8)} wallets={wallets} categoryName={categoryName} walletNameFor={walletNameFor} onEdit={openTransaction} onDelete={removeTransaction} />
+                ) : <EmptyState icon={<ReceiptText />} title="Belum ada transaksi" action="Catat transaksi pertama" onAction={() => openTransaction()} />}
               </section>
             )}
 
             {view === "transactions" && (
               <section>
-                {sortedTransactions.length ? (
-                  <TransactionList transactions={sortedTransactions} wallets={wallets} categoryName={categoryName} walletNameFor={walletNameFor} onDelete={removeTransaction} />
-                ) : <EmptyState icon={<ReceiptText />} title="Belum ada transaksi" action="Tambah transaksi" onAction={openTransaction} />}
+                <div className="transaction-filters" aria-label="Filter transaksi">
+                  <label>Jenis<select value={transactionTypeFilter} onChange={(event) => setTransactionTypeFilter(event.target.value as "all" | TransactionType)}><option value="all">Semua jenis</option><option value="income">Pemasukan</option><option value="expense">Pengeluaran</option></select></label>
+                  <label>Mata uang<select value={transactionCurrencyFilter} onChange={(event) => setTransactionCurrencyFilter(event.target.value as "all" | Currency)}><option value="all">Semua mata uang</option><option value="JPY">JPY</option><option value="IDR">IDR</option></select></label>
+                  <label>Bulan<input type="month" value={transactionMonthFilter} onChange={(event) => setTransactionMonthFilter(event.target.value)} /></label>
+                  <button className="text-button" onClick={() => { setTransactionTypeFilter("all"); setTransactionCurrencyFilter("all"); setTransactionMonthFilter(""); }}>Reset filter</button>
+                </div>
+                {visibleTransactions.length ? (
+                  <TransactionList transactions={visibleTransactions} wallets={wallets} categoryName={categoryName} walletNameFor={walletNameFor} onEdit={openTransaction} onDelete={removeTransaction} />
+                ) : transactions.length ? (
+                  <div className="empty-state"><div className="empty-icon"><ReceiptText /></div><h2>Tidak ada transaksi yang cocok</h2><button className="text-button" onClick={() => { setTransactionTypeFilter("all"); setTransactionCurrencyFilter("all"); setTransactionMonthFilter(""); }}>Hapus filter</button></div>
+                ) : <EmptyState icon={<ReceiptText />} title="Belum ada transaksi" action="Tambah transaksi" onAction={() => openTransaction()} />}
               </section>
             )}
 
@@ -380,7 +470,7 @@ export default function Home() {
               <section>
                 <div className="section-heading">
                   <div><p className="eyebrow">Pengelolaan</p><h2>Dompet Anda</h2></div>
-                  <button className="primary-button" onClick={() => setModal("wallet")}><Plus size={17} /> Dompet baru</button>
+                  <button className="primary-button" onClick={() => openWallet()}><Plus size={17} /> Dompet baru</button>
                 </div>
                 {wallets.length ? (
                   <div className="wallet-grid">
@@ -392,11 +482,14 @@ export default function Home() {
                           <h3>{wallet.name}</h3>
                           <strong>{formatMoney(calculateCurrencyBalances([wallet], domainTransactions)[wallet.currency], wallet.currency)}</strong>
                         </div>
-                        <button className="icon-button danger" onClick={() => removeWallet(wallet)} aria-label={`Hapus ${wallet.name}`}><Trash2 size={17} /></button>
+                        <div className="wallet-actions">
+                          <button className="icon-button" onClick={() => openWallet(wallet)} aria-label={`Edit ${wallet.name}`}><Pencil size={16} /></button>
+                          <button className="icon-button danger" onClick={() => removeWallet(wallet)} aria-label={`Hapus ${wallet.name}`}><Trash2 size={17} /></button>
+                        </div>
                       </article>
                     ))}
                   </div>
-                ) : <EmptyState icon={<WalletCards />} title="Belum ada dompet" action="Buat dompet pertama" onAction={() => setModal("wallet")} />}
+                ) : <EmptyState icon={<WalletCards />} title="Belum ada dompet" action="Buat dompet pertama" onAction={() => openWallet()} />}
               </section>
             )}
 
@@ -469,30 +562,30 @@ export default function Home() {
 
       {modal && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setModal(null)}>
-          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+          <div ref={modalRef} className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <div className="modal-heading">
-              <h2 id="modal-title">{modal === "wallet" ? "Dompet baru" : "Transaksi baru"}</h2>
+              <h2 id="modal-title">{modal === "wallet" ? (editingWallet ? "Edit dompet" : "Dompet baru") : (editingTransaction ? "Edit transaksi" : "Transaksi baru")}</h2>
               <button className="icon-button" onClick={() => setModal(null)} aria-label="Tutup"><X size={18} /></button>
             </div>
             {modal === "wallet" ? (
               <form onSubmit={saveWallet}>
                 <label>Nama dompet<input value={walletName} onChange={(event) => setWalletName(event.target.value)} placeholder="Contoh: Tabungan" /></label>
-                <label>Mata uang<select value={walletCurrency} onChange={(event) => setWalletCurrency(event.target.value as Currency)}><option value="JPY">JPY — Yen</option><option value="IDR">IDR — Rupiah</option></select></label>
+                <label>Mata uang<select value={editingWallet?.currency ?? walletCurrency} disabled={Boolean(editingWallet)} onChange={(event) => setWalletCurrency(event.target.value as Currency)}><option value="JPY">JPY — Yen</option><option value="IDR">IDR — Rupiah</option></select></label>
                 <label>Saldo awal<input type="number" min="0" step="1" value={openingBalance} onChange={(event) => setOpeningBalance(event.target.value)} placeholder="0" /></label>
-                <button className="primary-button wide" type="submit">Simpan dompet</button>
+                <button className="primary-button wide" type="submit">{editingWallet ? "Simpan perubahan" : "Simpan dompet"}</button>
               </form>
             ) : (
               <form onSubmit={saveTransaction}>
                 <div className="segmented">
-                  <button type="button" className={transactionType === "income" ? "selected" : ""} onClick={() => { setTransactionType("income"); setTransactionCategory(DEFAULT_CATEGORIES.find((item) => item.type === "income")?.id ?? ""); }}>Pemasukan</button>
-                  <button type="button" className={transactionType === "expense" ? "selected" : ""} onClick={() => { setTransactionType("expense"); setTransactionCategory(DEFAULT_CATEGORIES.find((item) => item.type === "expense")?.id ?? ""); }}>Pengeluaran</button>
+                  <button type="button" className={transactionType === "income" ? "selected" : ""} onClick={() => { setTransactionType("income"); setTransactionCategory(categories.find((item) => item.type === "income")?.id ?? ""); }}>Pemasukan</button>
+                  <button type="button" className={transactionType === "expense" ? "selected" : ""} onClick={() => { setTransactionType("expense"); setTransactionCategory(categories.find((item) => item.type === "expense")?.id ?? ""); }}>Pengeluaran</button>
                 </div>
                 <label>Dompet<select value={transactionWallet} onChange={(event) => setTransactionWallet(event.target.value)}>{wallets.map((wallet) => <option value={wallet.id} key={wallet.id}>{wallet.name} ({wallet.currency})</option>)}</select></label>
                 <label>Nominal<input type="number" min="1" step="1" value={transactionAmount} onChange={(event) => setTransactionAmount(event.target.value)} placeholder="0" /></label>
-                <label>Kategori<select value={transactionCategory} onChange={(event) => setTransactionCategory(event.target.value)}>{DEFAULT_CATEGORIES.filter((item) => item.type === transactionType).map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>
+                <label>Kategori<select value={transactionCategory} onChange={(event) => setTransactionCategory(event.target.value)}>{categories.filter((item) => item.type === transactionType).map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>
                 <label>Tanggal<input type="date" value={transactionDate} onChange={(event) => setTransactionDate(event.target.value)} /></label>
                 <label>Catatan (opsional)<input value={transactionNote} onChange={(event) => setTransactionNote(event.target.value)} placeholder="Tambahkan keterangan" /></label>
-                <button className="primary-button wide" type="submit">Simpan transaksi</button>
+                <button className="primary-button wide" type="submit">{editingTransaction ? "Simpan perubahan" : "Simpan transaksi"}</button>
               </form>
             )}
           </div>
@@ -516,12 +609,14 @@ function TransactionList({
   wallets,
   categoryName,
   walletNameFor,
+  onEdit,
   onDelete,
 }: {
   transactions: TransactionRecord[];
   wallets: WalletRecord[];
   categoryName: (id: string) => string;
   walletNameFor: (id: string) => string;
+  onEdit: (transaction: TransactionRecord) => void;
   onDelete: (transaction: TransactionRecord) => void;
 }) {
   return (
@@ -541,7 +636,10 @@ function TransactionList({
             <strong className={transaction.type === "income" ? "income" : "expense"}>
               {transaction.type === "income" ? "+" : "-"}{formatMoney(transaction.amount, currency)}
             </strong>
-            <button className="icon-button" onClick={() => onDelete(transaction)} aria-label="Hapus transaksi"><Ellipsis size={18} /></button>
+            <div className="row-actions">
+              <button className="icon-button" onClick={() => onEdit(transaction)} aria-label="Edit transaksi"><Pencil size={16} /></button>
+              <button className="icon-button danger" onClick={() => onDelete(transaction)} aria-label="Hapus transaksi"><Trash2 size={16} /></button>
+            </div>
           </article>
         );
       })}

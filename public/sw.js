@@ -17,15 +17,29 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
-  if (new URL(event.request.url).pathname.startsWith("/api/")) return;
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-        return response;
-      })
-      .catch(async () => (await caches.match(event.request)) || (await caches.match("/"))),
-  );
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(async () => {
+        const cachedShell = await caches.match("/");
+        if (cachedShell) return cachedShell;
+        return Response.error();
+      }),
+    );
+    return;
+  }
+
+  event.respondWith((async () => {
+    const cachedResponse = await caches.match(event.request);
+    if (cachedResponse) return cachedResponse;
+
+    const response = await fetch(event.request);
+    if (response.ok && url.pathname.startsWith("/_next/static/")) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(event.request, response.clone());
+    }
+    return response;
+  })());
 });

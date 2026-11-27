@@ -27,6 +27,16 @@ export type TransactionRecord = {
   updatedAt: string;
 };
 
+export type BudgetRecord = {
+  id: string;
+  walletId: string;
+  categoryId: string;
+  month: string;
+  amount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ExchangeRateCache = {
   id: "JPY_IDR";
   base: "JPY";
