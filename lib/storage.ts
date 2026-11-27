@@ -1,10 +1,17 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import type { ExchangeRateCache, WalletRecord, TransactionRecord, Category } from "./models";
+import type {
+  BudgetRecord,
+  Category,
+  ExchangeRateCache,
+  TransactionRecord,
+  WalletRecord,
+} from "./models";
 
 interface CuankuDB extends DBSchema {
   wallets: { key: string; value: WalletRecord };
   transactions: { key: string; value: TransactionRecord };
   categories: { key: string; value: Category };
+  budgets: { key: string; value: BudgetRecord };
   exchangeRate: { key: string; value: ExchangeRateCache };
   meta: { key: string; value: unknown };
 }
@@ -13,13 +20,18 @@ let dbPromise: Promise<IDBPDatabase<CuankuDB>> | null = null;
 
 export function getDb() {
   if (!dbPromise) {
-    dbPromise = openDB<CuankuDB>("cuanku", 1, {
-      upgrade(db) {
-        db.createObjectStore("wallets", { keyPath: "id" });
-        db.createObjectStore("transactions", { keyPath: "id" });
-        db.createObjectStore("categories", { keyPath: "id" });
-        db.createObjectStore("exchangeRate", { keyPath: "id" });
-        db.createObjectStore("meta");
+    dbPromise = openDB<CuankuDB>("cuanku", 2, {
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          db.createObjectStore("wallets", { keyPath: "id" });
+          db.createObjectStore("transactions", { keyPath: "id" });
+          db.createObjectStore("categories", { keyPath: "id" });
+          db.createObjectStore("exchangeRate", { keyPath: "id" });
+          db.createObjectStore("meta");
+        }
+        if (oldVersion < 2) {
+          db.createObjectStore("budgets", { keyPath: "id" });
+        }
       },
     });
   }
@@ -41,6 +53,15 @@ export async function getTransactions() {
 }
 export async function putTransaction(transaction: TransactionRecord) {
   return (await getDb()).put("transactions", transaction);
+}
+export async function getBudgets() {
+  return (await getDb()).getAll("budgets");
+}
+export async function putBudget(budget: BudgetRecord) {
+  return (await getDb()).put("budgets", budget);
+}
+export async function deleteBudget(id: string) {
+  return (await getDb()).delete("budgets", id);
 }
 export async function deleteTransaction(id: string) {
   return (await getDb()).delete("transactions", id);
@@ -67,18 +88,21 @@ export async function replaceAllData(data: {
   wallets: WalletRecord[];
   transactions: TransactionRecord[];
   categories: Category[];
+  budgets: BudgetRecord[];
 }) {
   const db = await getDb();
-  const tx = db.transaction(["wallets", "transactions", "categories"], "readwrite");
+  const tx = db.transaction(["wallets", "transactions", "categories", "budgets"], "readwrite");
   await Promise.all([
     tx.objectStore("wallets").clear(),
     tx.objectStore("transactions").clear(),
     tx.objectStore("categories").clear(),
+    tx.objectStore("budgets").clear(),
   ]);
   await Promise.all([
     ...data.wallets.map((wallet) => tx.objectStore("wallets").put(wallet)),
     ...data.transactions.map((transaction) => tx.objectStore("transactions").put(transaction)),
     ...data.categories.map((category) => tx.objectStore("categories").put(category)),
+    ...data.budgets.map((budget) => tx.objectStore("budgets").put(budget)),
   ]);
   await tx.done;
 }

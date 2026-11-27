@@ -58,5 +58,6 @@ export type BackupEnvelope = {
   wallets: WalletRecord[];
   transactions: TransactionRecord[];
   categories: Category[];
+  budgets?: BudgetRecord[];
   preferences?: Preferences;
 };

@@ -40,6 +40,7 @@ Aplikasi tidak memakai login atau cloud database pada MVP. Data keuangan utama t
 - Saldo awal per dompet
 - Mencatat pemasukan
 - Mencatat pengeluaran
+- Anggaran bulanan per dompet dan kategori pengeluaran
 - Mengedit dan menghapus transaksi
 - Dashboard saldo JPY dan IDR
 - Estimasi total lintas mata uang
@@ -62,7 +63,7 @@ Aplikasi tidak memakai login atau cloud database pada MVP. Data keuangan utama t
 - Supabase atau database server
 - Transfer antar-dompet
 - Remitansi sebagai transaksi
-- Budgeting kompleks
+- Budgeting kompleks (multi-periode dan perencanaan lanjutan)
 - Investasi
 - AI assistant
 - Notifikasi

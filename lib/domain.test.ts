@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateBudgetSpent,
   calculateCurrencyBalances,
   calculateEstimatedTotalInIdr,
   calculateEstimatedTotalInJpy,
@@ -44,5 +45,20 @@ describe("domain balance calculations", () => {
 
   it("calculates estimated total in JPY using the inverse rate", () => {
     expect(calculateEstimatedTotalInJpy({ JPY: 1300, IDR: 400000 }, 100)).toBeCloseTo(5300, 5);
+  });
+
+  it("counts only expenses matching budget wallet, category, and month", () => {
+    const spent = calculateBudgetSpent(
+      { walletId: "idr-wallet", categoryId: "food", month: "2026-11" },
+      [
+        { walletId: "idr-wallet", categoryId: "food", type: "expense", amount: 100, date: "2026-11-02T12:00:00.000Z" },
+        { walletId: "idr-wallet", categoryId: "food", type: "income", amount: 25, date: "2026-11-03T12:00:00.000Z" },
+        { walletId: "idr-wallet", categoryId: "food", type: "expense", amount: 50, date: "2026-10-30T12:00:00.000Z" },
+        { walletId: "jpy-wallet", categoryId: "food", type: "expense", amount: 75, date: "2026-11-04T12:00:00.000Z" },
+        { walletId: "idr-wallet", categoryId: "transport", type: "expense", amount: 60, date: "2026-11-05T12:00:00.000Z" },
+      ],
+    );
+
+    expect(spent).toBe(100);
   });
 });

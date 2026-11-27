@@ -1,6 +1,14 @@
 export type Currency = "JPY" | "IDR";
 export type TransactionType = "income" | "expense";
 
+export type BudgetTransaction = {
+  walletId: string;
+  categoryId: string;
+  type: TransactionType;
+  amount: number;
+  date: string;
+};
+
 export type Wallet = {
   id: string;
   name?: string;
@@ -63,6 +71,20 @@ export function calculateEstimatedTotalInJpy(
     throw new Error("Exchange rate must be a positive finite number");
   }
   return balances.JPY + balances.IDR / jpyToIdr;
+}
+
+export function calculateBudgetSpent(
+  budget: Pick<BudgetTransaction, "walletId" | "categoryId"> & { month: string },
+  transactions: BudgetTransaction[],
+): number {
+  return transactions
+    .filter((transaction) =>
+      transaction.walletId === budget.walletId &&
+      transaction.categoryId === budget.categoryId &&
+      transaction.type === "expense" &&
+      transaction.date.startsWith(budget.month),
+    )
+    .reduce((total, transaction) => total + transaction.amount, 0);
 }
 
 export function formatMoney(amount: number, currency: Currency): string {

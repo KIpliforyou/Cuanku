@@ -2,6 +2,8 @@
 
 Aplikasi personal finance local-first untuk mencatat saldo JPY dan IDR.
 
+Fitur meliputi dompet, transaksi, anggaran pengeluaran bulanan, laporan, dan backup lokal.
+
 ## Development
 
 ```bash

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  ChartPie,
   Download,
   Landmark,
   LayoutDashboard,
@@ -18,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  calculateBudgetSpent,
   calculateCurrencyBalances,
   calculateEstimatedTotalInIdr,
   formatMoney,
@@ -27,6 +29,7 @@ import {
 import { DEFAULT_CATEGORIES } from "../lib/categories";
 import type {
   BackupEnvelope,
+  BudgetRecord,
   ExchangeRateCache,
   Preferences,
   TransactionRecord,
@@ -34,12 +37,15 @@ import type {
 } from "../lib/models";
 import {
   deleteTransaction,
+  deleteBudget,
   deleteWallet,
   getCategories,
+  getBudgets,
   getExchangeRate,
   getTransactions,
   getWallets,
   putCategories,
+  putBudget,
   putExchangeRate,
   putTransaction,
   putWallet,
@@ -47,23 +53,30 @@ import {
 } from "../lib/storage";
 import { validateBackup } from "../lib/validation";
 
-type View = "dashboard" | "transactions" | "wallets" | "reports" | "backup" | "settings";
+type View = "dashboard" | "transactions" | "wallets" | "budgets" | "reports" | "backup" | "settings";
 
 const makeId = () => crypto.randomUUID();
+const currentMonth = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+};
 
 export default function Home() {
   const [view, setView] = useState<View>("dashboard");
   const [wallets, setWallets] = useState<WalletRecord[]>([]);
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
+  const [budgets, setBudgets] = useState<BudgetRecord[]>([]);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [rate, setRate] = useState<ExchangeRateCache | null>(null);
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<Preferences["theme"]>("system");
   const [themeLoaded, setThemeLoaded] = useState(false);
-  const [modal, setModal] = useState<"wallet" | "transaction" | null>(null);
+  const [modal, setModal] = useState<"wallet" | "transaction" | "budget" | null>(null);
   const [toast, setToast] = useState("");
   const [editingWallet, setEditingWallet] = useState<WalletRecord | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<TransactionRecord | null>(null);
+  const [editingBudget, setEditingBudget] = useState<BudgetRecord | null>(null);
+  const [budgetViewMonth, setBudgetViewMonth] = useState(currentMonth);
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<"all" | TransactionType>("all");
   const [transactionCurrencyFilter, setTransactionCurrencyFilter] = useState<"all" | Currency>("all");
   const [transactionMonthFilter, setTransactionMonthFilter] = useState("");
@@ -78,22 +91,28 @@ export default function Home() {
   const [transactionCategory, setTransactionCategory] = useState("");
   const [transactionDate, setTransactionDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [transactionNote, setTransactionNote] = useState("");
+  const [budgetWallet, setBudgetWallet] = useState("");
+  const [budgetCategory, setBudgetCategory] = useState("");
+  const [budgetMonth, setBudgetMonth] = useState(currentMonth);
+  const [budgetAmount, setBudgetAmount] = useState("");
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function load() {
       try {
-        const [storedWallets, storedTransactions, storedCategories, storedRate] = await Promise.all([
+        const [storedWallets, storedTransactions, storedCategories, storedRate, storedBudgets] = await Promise.all([
           getWallets(),
           getTransactions(),
           getCategories(),
           getExchangeRate(),
+          getBudgets(),
         ]);
         if (storedCategories.length === 0) {
           await putCategories(DEFAULT_CATEGORIES);
         }
         setWallets(storedWallets);
         setTransactions(storedTransactions);
+        setBudgets(storedBudgets);
         setCategories(storedCategories.length ? storedCategories : DEFAULT_CATEGORIES);
         setRate(storedRate ?? null);
         const savedTheme = localStorage.getItem("cuanku-theme");
@@ -173,6 +192,9 @@ export default function Home() {
   }
   async function refreshTransactions() {
     setTransactions(await getTransactions());
+  }
+  async function refreshBudgets() {
+    setBudgets(await getBudgets());
   }
 
   function openWallet(wallet?: WalletRecord) {
@@ -288,6 +310,76 @@ export default function Home() {
     }
   }
 
+  function openBudget(budget?: BudgetRecord) {
+    if (wallets.length === 0) {
+      setView("wallets");
+      setToast("Tambahkan dompet sebelum membuat anggaran");
+      return;
+    }
+    const firstExpenseCategory = categories.find((category) => category.type === "expense");
+    setEditingBudget(budget ?? null);
+    setBudgetWallet(budget?.walletId ?? wallets[0].id);
+    setBudgetCategory(budget?.categoryId ?? firstExpenseCategory?.id ?? "");
+    setBudgetMonth(budget?.month ?? budgetViewMonth);
+    setBudgetAmount(budget ? String(budget.amount) : "");
+    setModal("budget");
+  }
+
+  async function saveBudget(event: React.FormEvent) {
+    event.preventDefault();
+    const amount = Number(budgetAmount);
+    const category = categories.find((item) => item.id === budgetCategory && item.type === "expense");
+    if (
+      !wallets.some((wallet) => wallet.id === budgetWallet) ||
+      !category ||
+      !/^\d{4}-(0[1-9]|1[0-2])$/.test(budgetMonth) ||
+      !Number.isSafeInteger(amount) ||
+      amount <= 0
+    ) {
+      setToast("Periksa dompet, kategori, bulan, dan nominal anggaran");
+      return;
+    }
+
+    const existing = budgets.find((item) =>
+      item.walletId === budgetWallet &&
+      item.categoryId === budgetCategory &&
+      item.month === budgetMonth &&
+      item.id !== editingBudget?.id,
+    );
+    const now = new Date().toISOString();
+    const budget: BudgetRecord = {
+      id: editingBudget?.id ?? existing?.id ?? makeId(),
+      walletId: budgetWallet,
+      categoryId: budgetCategory,
+      month: budgetMonth,
+      amount,
+      createdAt: editingBudget?.createdAt ?? existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+
+    try {
+      await putBudget(budget);
+      await refreshBudgets();
+      setBudgetViewMonth(budgetMonth);
+      setEditingBudget(null);
+      setModal(null);
+      setToast(editingBudget || existing ? "Anggaran berhasil diperbarui" : "Anggaran berhasil ditambahkan");
+    } catch {
+      setToast("Anggaran gagal disimpan. Coba lagi.");
+    }
+  }
+
+  async function removeBudget(budget: BudgetRecord) {
+    if (!window.confirm("Hapus anggaran ini? Riwayat transaksi tidak akan terhapus.")) return;
+    try {
+      await deleteBudget(budget.id);
+      await refreshBudgets();
+      setToast("Anggaran berhasil dihapus");
+    } catch {
+      setToast("Anggaran gagal dihapus. Coba lagi.");
+    }
+  }
+
   const fetchRate = useCallback(async (force = false) => {
     if (!force && rate) {
       const age = Date.now() - new Date(rate.cachedAt).getTime();
@@ -322,6 +414,7 @@ export default function Home() {
       wallets,
       transactions,
       categories,
+      budgets,
       preferences: { theme },
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
@@ -341,9 +434,11 @@ export default function Home() {
         wallets: backup.wallets,
         transactions: backup.transactions,
         categories: backup.categories,
+        budgets: backup.budgets,
       });
       await refreshWallets();
       await refreshTransactions();
+      await refreshBudgets();
       setCategories(backup.categories);
       if (backup.preferences) setTheme(backup.preferences.theme);
       setToast("Backup berhasil dipulihkan");
@@ -354,9 +449,10 @@ export default function Home() {
 
   async function deleteAllData() {
     if (!window.confirm("Hapus seluruh dompet dan transaksi? Tindakan ini tidak dapat dibatalkan.")) return;
-    await replaceAllData({ wallets: [], transactions: [], categories: DEFAULT_CATEGORIES });
+    await replaceAllData({ wallets: [], transactions: [], categories: DEFAULT_CATEGORIES, budgets: [] });
     await refreshWallets();
     await refreshTransactions();
+    await refreshBudgets();
     setCategories(DEFAULT_CATEGORIES);
     setToast("Seluruh data berhasil dihapus");
   }
@@ -365,6 +461,11 @@ export default function Home() {
     categories.find((category) => category.id === id)?.name ?? "Lainnya";
   const walletNameFor = (id: string) =>
     wallets.find((wallet) => wallet.id === id)?.name ?? "Dompet";
+  const budgetCategoryName = (id: string) =>
+    categories.find((category) => category.id === id)?.name ?? "Kategori";
+  const budgetSpent = (budget: BudgetRecord) =>
+    calculateBudgetSpent(budget, transactions);
+  const currentBudgets = budgets.filter((budget) => budget.month === budgetViewMonth);
   const sortedTransactions = [...transactions].sort((a, b) => b.date.localeCompare(a.date));
   const visibleTransactions = sortedTransactions.filter((transaction) => {
     const wallet = wallets.find((item) => item.id === transaction.walletId);
@@ -385,6 +486,7 @@ export default function Home() {
           <NavButton active={view === "dashboard"} icon={<LayoutDashboard size={19} />} label="Ringkasan" onClick={() => setView("dashboard")} />
           <NavButton active={view === "transactions"} icon={<ReceiptText size={19} />} label="Transaksi" onClick={() => setView("transactions")} />
           <NavButton active={view === "wallets"} icon={<WalletCards size={19} />} label="Dompet" onClick={() => setView("wallets")} />
+          <NavButton active={view === "budgets"} icon={<ChartPie size={19} />} label="Anggaran" onClick={() => setView("budgets")} />
           <NavButton active={view === "reports"} icon={<Landmark size={19} />} label="Laporan" onClick={() => setView("reports")} />
           <NavButton active={view === "backup"} icon={<Download size={19} />} label="Backup" onClick={() => setView("backup")} />
           <NavButton active={view === "settings"} icon={<Settings size={19} />} label="Pengaturan" onClick={() => setView("settings")} />
@@ -399,6 +501,7 @@ export default function Home() {
               dashboard: "Ringkasan",
               transactions: "Transaksi",
               wallets: "Dompet",
+              budgets: "Anggaran",
               reports: "Laporan",
               backup: "Backup & Pemulihan",
               settings: "Pengaturan",
@@ -493,6 +596,62 @@ export default function Home() {
               </section>
             )}
 
+            {view === "budgets" && (
+              <section>
+                <div className="section-heading">
+                  <div><p className="eyebrow">Rencana bulanan</p><h2>Anggaran pengeluaran</h2></div>
+                  <div className="budget-heading-actions">
+                    <label className="month-picker">Bulan<input type="month" value={budgetViewMonth} onChange={(event) => setBudgetViewMonth(event.target.value)} /></label>
+                    <button className="primary-button" onClick={() => openBudget()}><Plus size={17} /> Anggaran baru</button>
+                  </div>
+                </div>
+                {currentBudgets.length ? (
+                  <div className="budget-grid">
+                    {currentBudgets.map((budget) => {
+                      const wallet = wallets.find((item) => item.id === budget.walletId);
+                      const spent = budgetSpent(budget);
+                      const remaining = budget.amount - spent;
+                      const progress = Math.min(100, (spent / budget.amount) * 100);
+                      const isOver = spent > budget.amount;
+                      return (
+                        <article className={`budget-card${isOver ? " over" : ""}`} key={budget.id}>
+                          <div className="budget-card-heading">
+                            <div>
+                              <span className="eyebrow">{budgetCategoryName(budget.categoryId)}</span>
+                              <h3>{wallet?.name ?? "Dompet"} <span>· {wallet?.currency}</span></h3>
+                            </div>
+                            <div className="budget-actions">
+                              <button className="icon-button" onClick={() => openBudget(budget)} aria-label="Edit anggaran"><Pencil size={16} /></button>
+                              <button className="icon-button danger" onClick={() => removeBudget(budget)} aria-label="Hapus anggaran"><Trash2 size={16} /></button>
+                            </div>
+                          </div>
+                          <div className="budget-numbers">
+                            <div><span>Terpakai</span><strong>{formatMoney(spent, wallet?.currency ?? "IDR")}</strong></div>
+                            <div><span>Anggaran</span><strong>{formatMoney(budget.amount, wallet?.currency ?? "IDR")}</strong></div>
+                          </div>
+                          <div className="budget-progress" role="progressbar" aria-label={`Penggunaan anggaran ${budgetCategoryName(budget.categoryId)}`} aria-valuenow={Math.round(Math.min(100, spent / budget.amount * 100))} aria-valuemin={0} aria-valuemax={100}>
+                            <span style={{ width: `${progress}%` }} />
+                          </div>
+                          <p className="budget-remaining">
+                            {isOver ? "Melebihi anggaran" : "Sisa anggaran"}{" "}
+                            <strong>{formatMoney(remaining, wallet?.currency ?? "IDR")}</strong>
+                            <span>{Math.round(spent / budget.amount * 100)}% terpakai</span>
+                          </p>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={<ChartPie />}
+                    title={budgets.length ? "Belum ada anggaran untuk bulan ini" : "Belum ada anggaran"}
+                    action="Buat anggaran"
+                    onAction={() => openBudget()}
+                  />
+                )}
+              </section>
+            )}
+
             {view === "reports" && (
               <section>
                 <div className="report-grid">
@@ -564,10 +723,24 @@ export default function Home() {
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setModal(null)}>
           <div ref={modalRef} className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <div className="modal-heading">
-              <h2 id="modal-title">{modal === "wallet" ? (editingWallet ? "Edit dompet" : "Dompet baru") : (editingTransaction ? "Edit transaksi" : "Transaksi baru")}</h2>
+              <h2 id="modal-title">
+                {modal === "budget"
+                  ? editingBudget ? "Edit anggaran" : "Anggaran baru"
+                  : modal === "wallet"
+                    ? editingWallet ? "Edit dompet" : "Dompet baru"
+                    : editingTransaction ? "Edit transaksi" : "Transaksi baru"}
+              </h2>
               <button className="icon-button" onClick={() => setModal(null)} aria-label="Tutup"><X size={18} /></button>
             </div>
-            {modal === "wallet" ? (
+            {modal === "budget" ? (
+              <form onSubmit={saveBudget}>
+                <label>Dompet<select value={budgetWallet} onChange={(event) => setBudgetWallet(event.target.value)}>{wallets.map((wallet) => <option value={wallet.id} key={wallet.id}>{wallet.name} ({wallet.currency})</option>)}</select></label>
+                <label>Kategori pengeluaran<select value={budgetCategory} onChange={(event) => setBudgetCategory(event.target.value)}>{categories.filter((category) => category.type === "expense").map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>
+                <label>Bulan<input type="month" value={budgetMonth} onChange={(event) => setBudgetMonth(event.target.value)} /></label>
+                <label>Nominal anggaran<input type="number" min="1" step="1" value={budgetAmount} onChange={(event) => setBudgetAmount(event.target.value)} placeholder="0" /></label>
+                <button className="primary-button wide" type="submit">{editingBudget ? "Simpan perubahan" : "Simpan anggaran"}</button>
+              </form>
+            ) : modal === "wallet" ? (
               <form onSubmit={saveWallet}>
                 <label>Nama dompet<input value={walletName} onChange={(event) => setWalletName(event.target.value)} placeholder="Contoh: Tabungan" /></label>
                 <label>Mata uang<select value={editingWallet?.currency ?? walletCurrency} disabled={Boolean(editingWallet)} onChange={(event) => setWalletCurrency(event.target.value as Currency)}><option value="JPY">JPY — Yen</option><option value="IDR">IDR — Rupiah</option></select></label>
