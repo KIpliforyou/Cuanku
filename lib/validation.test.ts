@@ -47,6 +47,16 @@ describe("backup validation", () => {
     });
   });
 
+  it("migrates removed theme preferences to light mode", () => {
+    for (const theme of ["cat", "system"] as const) {
+      const migrated = validateBackup({
+        ...backup,
+        preferences: { theme },
+      });
+      expect(migrated.preferences?.theme).toBe("light");
+    }
+  });
+
   it("accepts older categories without icons and rejects unknown icons", () => {
     expect(validateBackup(backup).categories[0]).not.toHaveProperty("icon");
     const invalid = {

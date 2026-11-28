@@ -73,7 +73,8 @@ const backupContents = {
 };
 
 const preferenceV1Schema = z.object({
-  theme: z.enum(["light", "dark", "system"]),
+  theme: z.enum(["light", "dark", "system", "cat"])
+    .transform((theme) => theme === "dark" ? "dark" : "light"),
 });
 
 const preferenceV2Schema = preferenceV1Schema.extend({

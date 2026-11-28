@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Maskot kucing Cuanku">
+  <rect width="128" height="128" rx="32" fill="#FFF7E8"/>
+  <ellipse cx="64" cy="112" rx="35" ry="8" fill="#E9CDB3" opacity=".55"/>
+  <path d="M29 55 25 24l25 17c9-4 20-4 29 0l24-17-4 31c5 8 7 17 6 26-2 23-19 38-41 38S25 104 23 81c-1-10 1-19 6-26Z" fill="#EFAF67"/>
+  <path d="M25 24l25 17-13 7Z" fill="#F6CFA6"/>
+  <path d="M103 24 79 41l13 7Z" fill="#F6CFA6"/>
+  <path d="M42 62c6-6 15-9 22-9s16 3 22 9c7 7 11 17 10 27-2 19-15 30-32 30S34 108 32 89c-1-10 3-20 10-27Z" fill="#FFE2B7"/>
+  <ellipse cx="52" cy="82" rx="5" ry="7" fill="#3D3A38"/>
+  <ellipse cx="76" cy="82" rx="5" ry="7" fill="#3D3A38"/>
+  <circle cx="50" cy="80" r="1.5" fill="white"/>
+  <circle cx="74" cy="80" r="1.5" fill="white"/>
+  <path d="m64 91 7 5-7 5-7-5Z" fill="#D76F78"/>
+  <path d="M64 101c-6 7-14 6-17 1m17-1c6 7 14 6 17 1" fill="none" stroke="#3D3A38" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M35 94H16m19 8H12m81-8h19m-19 8h23" fill="none" stroke="#3D3A38" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="64" cy="112" r="14" fill="#178B70"/>
+  <path d="M64 103a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z" fill="none" stroke="#FFF7E8" stroke-width="3"/>
+  <path d="M64 107v10m-5-5h10" stroke="#FFF7E8" stroke-width="3" stroke-linecap="round"/>
+  <path d="M43 53c6-5 12-8 21-9m21 9c-6-5-12-8-21-9" fill="none" stroke="#D9934D" stroke-width="4" stroke-linecap="round"/>
+</svg>

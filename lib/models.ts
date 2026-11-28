@@ -145,7 +145,7 @@ export const BACKUP_REMINDER_OPTIONS = [7, 14, 30] as const;
 export type BackupReminderDays = (typeof BACKUP_REMINDER_OPTIONS)[number];
 
 export type Preferences = {
-  theme: "light" | "dark" | "system";
+  theme: "light" | "dark";
   backupReminderDays?: BackupReminderDays;
   displayCurrency?: Currency;
   showEquivalentInReports?: boolean;

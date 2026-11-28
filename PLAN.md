@@ -18,7 +18,7 @@ Aplikasi tidak memakai login atau cloud database pada MVP. Data keuangan utama t
 - Repo: `https://github.com/KIpliforyou/Cuanku.git`
 - Design: baru, arah Modern Finance Minimal
 - Platform: mobile-first dan responsive desktop
-- Theme: light default, dark dan system tersedia
+- Tema: terang sebagai default dan gelap sebagai pilihan; keduanya memakai sistem visual yang sama
 - Penyimpanan: IndexedDB untuk data keuangan utama
 - LocalStorage: hanya preferensi kecil seperti theme dan filter terakhir
 - Login: ditunda
@@ -50,7 +50,7 @@ Aplikasi tidak memakai login atau cloud database pada MVP. Data keuangan utama t
 - Laporan sederhana per mata uang
 - Export backup JSON
 - Import backup JSON dengan validasi dan replace atomik
-- Light/dark/system theme
+- Light/dark theme
 - Responsive mobile dan desktop
 - Empty, loading, error, offline, dan success state
 - App shell offline melalui service worker sederhana
@@ -304,7 +304,7 @@ Layer yang direncanakan:
 ### Fase 4 — UI dan Offline
 
 - Responsive layout
-- Light/dark/system theme
+- Light/dark theme
 - Service worker app shell
 - Accessibility hardening
 - Browser smoke test
@@ -331,7 +331,7 @@ Roadmap lanjutan disetujui untuk dikerjakan bertahap. Urutan yang dipilih: Fase 
 - Jadikan aksi tambah transaksi mudah dijangkau di layar kecil, dengan form singkat dan target maksimal tiga ketukan untuk pencatatan normal.
 - Tambahkan ringkasan pemasukan/pengeluaran bulan ini dan sisa anggaran ke dashboard tanpa mencampur JPY dan IDR.
 - Ganti indikator tunggu dengan skeleton singkat; pertahankan state error pemuatan lokal yang dapat dipulihkan.
-- Pertahankan empty state, kontras, dark/system theme, reduced motion, dan akses keyboard.
+- Pertahankan empty state, kontras, tema terang/gelap, reduced motion, dan akses keyboard.
 
 #### Fase 7 — Laporan, Kategori, dan Ekspor (dirilis)
 
@@ -386,6 +386,12 @@ Fase 14–18 tetap berada di luar lingkup pekerjaan ini. Setiap perubahan pada e
 - Transfer dari rekening kas ke kartu kredit dianggap pembayaran dan mengurangi utang.
 - Utang kartu kredit tidak dicampur dengan saldo kas JPY/IDR.
 - Pembelian kartu kredit tetap tampil sebagai pengeluaran pada laporan periode, sesuai tanggal transaksi.
+
+#### Desain dan maskot
+- UI diarahkan ulang menggunakan prinsip `unslop` oleh Damir Sokolovsky, dengan permukaan hangat yang tenang, hierarki angka yang jelas, dan satu detail kucing yang konsisten.
+- Maskot Cuanku memiliki ekspresi berbeda untuk ringkasan, transaksi, dompet, anggaran, laporan, backup, pengaturan, transfer, dan jadwal berulang.
+- Gerakan maskot lembut dan dihentikan untuk preferensi reduced motion.
+- Aturan dan referensi desain: https://github.com/heydamir/unslop
 
 ## 12. Quality Gates
 

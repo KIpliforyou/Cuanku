@@ -177,7 +177,7 @@ export default function Home() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [theme, setTheme] = useState<Preferences["theme"]>("system");
+  const [theme, setTheme] = useState<Preferences["theme"]>("light");
   const [themeLoaded, setThemeLoaded] = useState(false);
   const [modal, setModal] = useState<"wallet" | "transaction" | "budget" | "category" | "transfer" | "conversion" | "recurring" | null>(null);
   const [toast, setToast] = useState("");
@@ -313,7 +313,7 @@ export default function Home() {
         setRate(storedRate ?? null);
         setManualRateInput(storedRate?.source === "manual" ? storedRate.rate.toFixed(4) : "");
         const savedTheme = localStorage.getItem("cuanku-theme");
-        if (savedTheme === "light" || savedTheme === "dark" || savedTheme === "system") {
+        if (savedTheme === "light" || savedTheme === "dark") {
           setTheme(savedTheme);
         }
         const savedDisplayCurrency = localStorage.getItem("cuanku-display-currency");
@@ -1566,19 +1566,19 @@ export default function Home() {
     <div className="app-shell">
       <aside className="sidebar">
         <button className="brand" onClick={() => setView("dashboard")} aria-label="Beranda Cuanku">
-          <span className="brand-mark">C</span>
+          <span className="brand-mark"><CatMascot view="dashboard" size={34} /></span>
           <span>cuanku</span>
         </button>
         <nav className="nav-list" aria-label="Navigasi utama">
-          <NavButton active={view === "dashboard"} icon={<LayoutDashboard size={19} />} label="Ringkasan" onClick={() => setView("dashboard")} />
-          <NavButton active={view === "transactions"} icon={<ReceiptText size={19} />} label="Transaksi" onClick={() => setView("transactions")} />
-          <NavButton className="mobile-more-item" active={view === "wallets"} icon={<WalletCards size={19} />} label="Dompet" onClick={() => setView("wallets")} />
-          <NavButton active={view === "budgets"} icon={<ChartPie size={19} />} label="Anggaran" onClick={() => setView("budgets")} />
-          <NavButton active={view === "reports"} icon={<Landmark size={19} />} label="Laporan" onClick={() => setView("reports")} />
-          <NavButton className="mobile-more-item" active={view === "transfers"} icon={<ArrowLeftRight size={19} />} label="Transfer" onClick={() => setView("transfers")} />
-          <NavButton className="mobile-more-item" active={view === "recurring"} icon={<RefreshCw size={19} />} label="Berulang" onClick={() => setView("recurring")} />
-          <NavButton className="mobile-more-item" active={view === "backup"} icon={<Download size={19} />} label="Backup" onClick={() => setView("backup")} />
-          <NavButton className="mobile-more-item" active={view === "settings"} icon={<Settings size={19} />} label="Pengaturan" onClick={() => setView("settings")} />
+          <NavButton active={view === "dashboard"} icon={<LayoutDashboard size={18} />} label="Ringkasan" onClick={() => setView("dashboard")} />
+          <NavButton active={view === "transactions"} icon={<ReceiptText size={18} />} label="Transaksi" onClick={() => setView("transactions")} />
+          <NavButton className="mobile-more-item" active={view === "wallets"} icon={<WalletCards size={18} />} label="Dompet" onClick={() => setView("wallets")} />
+          <NavButton active={view === "budgets"} icon={<ChartPie size={18} />} label="Anggaran" onClick={() => setView("budgets")} />
+          <NavButton active={view === "reports"} icon={<Landmark size={18} />} label="Laporan" onClick={() => setView("reports")} />
+          <NavButton className="mobile-more-item" active={view === "transfers"} icon={<ArrowLeftRight size={18} />} label="Transfer" onClick={() => setView("transfers")} />
+          <NavButton className="mobile-more-item" active={view === "recurring"} icon={<RefreshCw size={18} />} label="Berulang" onClick={() => setView("recurring")} />
+          <NavButton className="mobile-more-item" active={view === "backup"} icon={<Download size={18} />} label="Backup" onClick={() => setView("backup")} />
+          <NavButton className="mobile-more-item" active={view === "settings"} icon={<Settings size={18} />} label="Pengaturan" onClick={() => setView("settings")} />
           <div className={`mobile-more${["wallets", "transfers", "recurring", "backup", "settings"].includes(view) ? " active" : ""}`} ref={moreMenuRef}>
             <button
               className={`nav-item${["wallets", "transfers", "recurring", "backup", "settings"].includes(view) ? " active" : ""}`}
@@ -1587,7 +1587,7 @@ export default function Home() {
               aria-label="Lainnya"
               onClick={() => setMoreOpen((open) => !open)}
             >
-              <MoreHorizontal size={19} /><span>Lainnya</span>
+              <MoreHorizontal size={18} /><span>Lainnya</span>
             </button>
             {moreOpen && (
               <nav className="more-menu" id="mobile-more-menu" aria-label="Menu lainnya">
@@ -1618,11 +1618,19 @@ export default function Home() {
               recurring: "Transaksi berulang",
             }[view]}</h1>
           </div>
+          <div className="mascot-companion" aria-label={`Maskot Cuanku sedang ${mascotMood(view)}`}>
+            <CatMascot key={view} view={view} size={76} />
+            <span>{mascotCaption(view)}</span>
+          </div>
           <div className="top-actions">
-            <button className="icon-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="Ganti tema">
+            <button
+              className="icon-button"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              aria-label={theme === "dark" ? "Ganti ke tema terang" : "Ganti ke tema gelap"}
+            >
               {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <button className="primary-button add-transaction-button" aria-label="Tambah transaksi" onClick={() => openTransaction()}><Plus size={17} /> Tambah transaksi</button>
+            <button className="primary-button add-transaction-button" aria-label="Tambah transaksi" onClick={() => openTransaction()}><Plus size={16} /> Tambah transaksi</button>
           </div>
         </header>
 
@@ -1685,7 +1693,7 @@ export default function Home() {
                         Simpan salinan JSON di tempat yang aman; data utama tetap hanya ada di browser ini.
                       </p>
                     </div>
-                    <button className="primary-button" onClick={() => void exportBackup()}><Download size={17} /> Backup sekarang</button>
+                    <button className="primary-button" onClick={() => void exportBackup()}><Download size={16} /> Backup sekarang</button>
                   </aside>
                 )}
                 {dashboardBudgetAlerts.length > 0 && (
@@ -1709,7 +1717,10 @@ export default function Home() {
                 <div className="balance-grid">
                   <article className="balance-card featured">
                     <span>Saldo JPY</span>
-                    <strong>{formatMoney(balances.JPY, "JPY")}</strong>
+                    <div className="balance-value">
+                      <strong>{formatMoney(balances.JPY, "JPY")}</strong>
+                      <span className="currency-code">JPY</span>
+                    </div>
                     <small>{wallets.filter((wallet) => wallet.currency === "JPY").length} dompet</small>
                     <div className="monthly-flow">
                       <div><span>Pemasukan bulan ini</span><strong>+{formatMoney(monthlyFlows.JPY.income, "JPY")}</strong></div>
@@ -1718,7 +1729,10 @@ export default function Home() {
                   </article>
                   <article className="balance-card">
                     <span>Saldo IDR</span>
-                    <strong>{formatMoney(balances.IDR, "IDR")}</strong>
+                    <div className="balance-value">
+                      <strong>{formatMoney(balances.IDR, "IDR")}</strong>
+                      <span className="currency-code">IDR</span>
+                    </div>
                     <small>{wallets.filter((wallet) => wallet.currency === "IDR").length} dompet</small>
                     <div className="monthly-flow">
                       <div><span>Pemasukan bulan ini</span><strong>+{formatMoney(monthlyFlows.IDR.income, "IDR")}</strong></div>
@@ -1729,14 +1743,17 @@ export default function Home() {
                     <span>Estimasi lintas mata uang</span>
                     {rate ? (
                       <>
-                        <strong>
-                          {formatMoney(
-                            displayCurrency === "IDR"
-                              ? calculateEstimatedTotalInIdr(balances, rate.rate)
-                              : calculateEstimatedTotalInJpy(balances, rate.rate),
-                            displayCurrency,
-                          )}
-                        </strong>
+                        <div className="balance-value">
+                          <strong>
+                            {formatMoney(
+                              displayCurrency === "IDR"
+                                ? calculateEstimatedTotalInIdr(balances, rate.rate)
+                                : calculateEstimatedTotalInJpy(balances, rate.rate),
+                              displayCurrency,
+                            )}
+                          </strong>
+                          <span className="currency-code">{displayCurrency}</span>
+                        </div>
                         <small>
                           Estimasi · 1 JPY = {rate.rate.toFixed(4)} IDR · {rate.source === "manual" ? "kurs manual" : "kurs otomatis"} ·{" "}
                           {new Date(rate.cachedAt).toLocaleDateString("id-ID", { timeZone: "Asia/Tokyo" })}
@@ -1805,8 +1822,8 @@ export default function Home() {
                 <div className="section-heading">
                   <div><p className="eyebrow">Tidak dihitung sebagai pemasukan atau pengeluaran</p><h2>Transfer dan konversi</h2></div>
                   <div className="section-actions">
-                    <button className="secondary-button" onClick={() => openTransfer(undefined, "conversion")}><ArrowLeftRight size={17} /> Konversi mata uang</button>
-                    <button className="primary-button" onClick={() => openTransfer(undefined, "transfer")}><Plus size={17} /> Transfer baru</button>
+                    <button className="secondary-button" onClick={() => openTransfer(undefined, "conversion")}><ArrowLeftRight size={16} /> Konversi mata uang</button>
+                    <button className="primary-button" onClick={() => openTransfer(undefined, "transfer")}><Plus size={16} /> Transfer baru</button>
                   </div>
                 </div>
                 {sortedTransfers.length ? (
@@ -1834,7 +1851,7 @@ export default function Home() {
                     <p className="eyebrow">Setiap jadwal menghasilkan draf</p>
                     <h2>Aturan transaksi berulang</h2>
                   </div>
-                  <button className="primary-button" onClick={() => openRecurringRule()}><Plus size={17} /> Aturan baru</button>
+                  <button className="primary-button" onClick={() => openRecurringRule()}><Plus size={16} /> Aturan baru</button>
                 </div>
                 <p className="section-note">
                   Transaksi yang jatuh tempo tidak langsung mengubah saldo. Tinjau dan setujui setiap draf terlebih dahulu.
@@ -1903,13 +1920,13 @@ export default function Home() {
               <section>
                 <div className="section-heading">
                   <div><p className="eyebrow">Pengelolaan</p><h2>Dompet Anda</h2></div>
-                  <button className="primary-button" onClick={() => openWallet()}><Plus size={17} /> Dompet baru</button>
+                  <button className="primary-button" onClick={() => openWallet()}><Plus size={16} /> Dompet baru</button>
                 </div>
                 {wallets.length ? (
                   <div className="wallet-grid">
                     {wallets.map((wallet) => (
                       <article className="wallet-card" key={wallet.id}>
-                        <div className="wallet-icon"><WalletCards size={20} /></div>
+                        <div className="wallet-icon"><WalletCards size={18} /></div>
                         <div className="wallet-main">
                           <span>{wallet.currency}</span>
                           <h3>{wallet.name}</h3>
@@ -1933,7 +1950,7 @@ export default function Home() {
                         </div>
                         <div className="wallet-actions">
                           <button className="icon-button" onClick={() => openWallet(wallet)} aria-label={`Edit ${wallet.name}`}><Pencil size={16} /></button>
-                          <button className="icon-button danger" onClick={() => removeWallet(wallet)} aria-label={`Hapus ${wallet.name}`}><Trash2 size={17} /></button>
+                          <button className="icon-button danger" onClick={() => removeWallet(wallet)} aria-label={`Hapus ${wallet.name}`}><Trash2 size={16} /></button>
                         </div>
                       </article>
                     ))}
@@ -1948,7 +1965,7 @@ export default function Home() {
                   <div><p className="eyebrow">Rencana bulanan</p><h2>Anggaran pengeluaran</h2></div>
                   <div className="budget-heading-actions">
                     <label className="month-picker">Bulan<input type="month" value={budgetViewMonth} onChange={(event) => setBudgetViewMonth(event.target.value)} /></label>
-                    <button className="primary-button" onClick={() => openBudget()}><Plus size={17} /> Anggaran baru</button>
+                    <button className="primary-button" onClick={() => openBudget()}><Plus size={16} /> Anggaran baru</button>
                   </div>
                 </div>
                 {currentBudgets.length ? (
@@ -2120,7 +2137,7 @@ export default function Home() {
                 <article className="settings-card">
                   <h2>Export backup</h2>
                   <p>Unduh seluruh dompet, transaksi, kategori, dan preferensi sebagai JSON.</p>
-                  <button className="primary-button" onClick={exportBackup}><Download size={17} /> Unduh JSON</button>
+                  <button className="primary-button" onClick={exportBackup}><Download size={16} /> Unduh JSON</button>
                 </article>
                 <article className="settings-card">
                   <h2>Import backup</h2>
@@ -2130,7 +2147,7 @@ export default function Home() {
                 <article className="settings-card danger-card">
                   <h2>Hapus seluruh data</h2>
                   <p>Tindakan ini menghapus semua dompet dan transaksi dari browser.</p>
-                  <button className="danger-button" onClick={deleteAllData}><Trash2 size={17} /> Hapus data</button>
+                  <button className="danger-button" onClick={deleteAllData}><Trash2 size={16} /> Hapus data</button>
                 </article>
               </section>
             )}
@@ -2160,9 +2177,9 @@ export default function Home() {
                   <h2>Tampilan</h2>
                   <p>Pilih tema aplikasi.</p>
                   <div className="theme-options">
-                    {(["light", "dark", "system"] as Preferences["theme"][]).map((option) => (
+                    {(["light", "dark"] as Preferences["theme"][]).map((option) => (
                       <button key={option} className={theme === option ? "selected" : ""} onClick={() => setTheme(option)}>
-                        {option === "light" ? "Terang" : option === "dark" ? "Gelap" : "Sistem"}
+                        {option === "light" ? "Terang" : "Gelap"}
                       </button>
                     ))}
                   </div>
@@ -2259,14 +2276,14 @@ export default function Home() {
                 <article className="settings-card category-settings">
                   <div className="section-heading">
                     <div><h2>Kategori</h2><p>Kelola kategori pemasukan dan pengeluaran.</p></div>
-                    <button className="primary-button" onClick={() => openCategory()}><Plus size={17} /> Kategori</button>
+                    <button className="primary-button" onClick={() => openCategory()}><Plus size={16} /> Kategori</button>
                   </div>
                   <div className="category-list">
                     {categories.map((category) => {
                       const Icon = CATEGORY_ICONS[category.icon ?? "tag"];
                       return (
                         <div className="category-row" key={category.id}>
-                          <span className="category-icon"><Icon size={17} /></span>
+                          <span className="category-icon"><Icon size={16} /></span>
                           <span className="category-row-name">{category.name}<small>{category.type === "income" ? "Pemasukan" : "Pengeluaran"}</small></span>
                           <button className="icon-button" onClick={() => openCategory(category)} aria-label={`Edit kategori ${category.name}`}><Pencil size={16} /></button>
                           <button className="icon-button danger" onClick={() => void removeCategory(category)} aria-label={`Hapus kategori ${category.name}`}><Trash2 size={16} /></button>
@@ -2426,6 +2443,98 @@ export default function Home() {
   );
 }
 
+function mascotMood(view: View) {
+  const moods: Record<View, string> = {
+    dashboard: "santai",
+    transactions: "mencatat",
+    wallets: "merawat dompet",
+    budgets: "jaga anggaran",
+    reports: "menganalisis",
+    backup: "siap berjaga",
+    settings: "mengatur",
+    transfers: "mengantar uang",
+    recurring: "menunggu jadwal",
+  };
+  return moods[view];
+}
+
+function mascotCaption(view: View) {
+  const captions: Record<View, string> = {
+    dashboard: "Hari ini terlihat aman",
+    transactions: "Catatan rapi",
+    wallets: "Dompet aman",
+    budgets: "Tetap dalam batas",
+    reports: "Sudah dihitung",
+    backup: "Salinan aman",
+    settings: "Semua nyaman",
+    transfers: "Pergi dengan aman",
+    recurring: "Jadwalku siap",
+  };
+  return captions[view];
+}
+
+function CatMascot({ view, size = 76 }: { view: View; size?: number }) {
+  const surprised = ["transfers", "backup"].includes(view);
+  const curious = ["reports", "settings"].includes(view);
+  const smiling = ["dashboard", "wallets", "budgets"].includes(view);
+  const sleepy = view === "recurring";
+
+  return (
+    <svg
+      className={`cat-mascot cat-mascot-${view}`}
+      width={size}
+      height={size}
+      viewBox="0 0 128 128"
+      role="img"
+      aria-label={`Maskot kucing Cuanku: ${mascotMood(view)}`}
+    >
+      <ellipse cx="64" cy="112" rx="37" ry="7" fill="#2A241F" opacity=".08" />
+      <path d="M27 53 23 22l28 20c8-3 18-3 26 0l28-20-4 31c6 9 8 20 6 30-3 23-20 37-43 37S24 106 21 83c-2-11 1-22 6-30Z" fill="#EBAF72" />
+      <path d="M23 22l28 20-15 6Z" fill="#F8D5AE" />
+      <path d="M101 22 73 42l15 6Z" fill="#F8D5AE" />
+      <path d="M40 58c8-8 40-8 48 0 10 10 12 28 7 43-5 17-18 25-33 25S34 118 29 101c-5-15-3-33 11-43Z" fill="#FFE0B7" />
+      <path d="M45 50c9-5 29-5 38 0" fill="none" stroke="#C98246" strokeWidth="4" strokeLinecap="round" />
+      {sleepy ? (
+        <>
+          <path d="M43 82c5 5 11 5 16 0" fill="none" stroke="#40372F" strokeWidth="4" strokeLinecap="round" />
+          <path d="M69 82c5 5 11 5 16 0" fill="none" stroke="#40372F" strokeWidth="4" strokeLinecap="round" />
+        </>
+      ) : (
+        <>
+          {surprised ? (
+            <>
+              <circle cx="50" cy="82" r="7" fill="#40372F" />
+              <circle cx="78" cy="82" r="7" fill="#40372F" />
+              <circle cx="48" cy="80" r="2" fill="white" />
+              <circle cx="76" cy="80" r="2" fill="white" />
+            </>
+          ) : (
+            <>
+              <ellipse cx="50" cy="82" rx={curious ? 4 : 5} ry={curious ? 8 : 7} fill="#40372F" />
+              <ellipse cx="78" cy="82" rx={curious ? 4 : 5} ry={curious ? 8 : 7} fill="#40372F" />
+              <circle cx="49" cy="80" r="1.5" fill="white" />
+              <circle cx="77" cy="80" r="1.5" fill="white" />
+            </>
+          )}
+        </>
+      )}
+      <path d="m64 91 7 5-7 5-7-5Z" fill="#D67578" />
+      {surprised ? (
+        <ellipse cx="64" cy="108" rx="7" ry="9" fill="#40372F" />
+      ) : smiling ? (
+        <path d="M64 101c-6 7-14 6-17 1m17-1c6 7 14 6 17 1" fill="none" stroke="#40372F" strokeWidth="2.5" strokeLinecap="round" />
+      ) : (
+        <path d="M58 104c4 3 8 3 12 0" fill="none" stroke="#40372F" strokeWidth="2.5" strokeLinecap="round" />
+      )}
+      <path d="M34 94H16m19 8H12m80-8h20m-20 8h24" fill="none" stroke="#40372F" strokeWidth="2" strokeLinecap="round" />
+      <g className="cat-paw">
+        <circle cx="64" cy="112" r="12" fill="#4F8F7A" />
+        <path d="M64 105v14m-7-7h14" fill="none" stroke="#FFF9F0" strokeWidth="3" strokeLinecap="round" />
+      </g>
+    </svg>
+  );
+}
+
 function NavButton({
   active,
   icon,
@@ -2443,7 +2552,7 @@ function NavButton({
 }
 
 function EmptyState({ icon, title, action, onAction }: { icon: React.ReactNode; title: string; action: string; onAction: () => void }) {
-  return <div className="empty-state"><div className="empty-icon">{icon}</div><h2>{title}</h2><button className="primary-button" onClick={onAction}><Plus size={17} /> {action}</button></div>;
+  return <div className="empty-state"><div className="empty-icon">{icon}</div><h2>{title}</h2><button className="primary-button" onClick={onAction}><Plus size={16} /> {action}</button></div>;
 }
 
 function TransactionList({
@@ -2492,7 +2601,7 @@ function TransactionList({
           const to = wallets.find((item) => item.id === entry.transfer.toWalletId);
           return (
             <article className="transaction-row transfer-activity" key={`transfer-${entry.transfer.id}`}>
-              <div className="transaction-icon transfer"><ArrowLeftRight size={19} /></div>
+              <div className="transaction-icon transfer"><ArrowLeftRight size={18} /></div>
               <div className="transaction-main">
                 <h3>{entry.transfer.kind === "conversion" ? "Konversi mata uang" : "Transfer antar-dompet"}</h3>
                 <p>
@@ -2521,7 +2630,7 @@ function TransactionList({
         return (
           <article className="transaction-row" key={`transaction-${transaction.id}`}>
             <div className={transaction.type === "income" ? "transaction-icon income" : "transaction-icon expense"}>
-              {transaction.type === "income" ? <ArrowDownLeft size={19} /> : <ArrowUpRight size={19} />}
+              {transaction.type === "income" ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}
             </div>
             <div className="transaction-main">
               <h3>{categoryName(transaction.categoryId)}{transaction.recurringRuleId ? " · Berulang" : ""}</h3>
