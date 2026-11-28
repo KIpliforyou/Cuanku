@@ -42,6 +42,7 @@ import {
   calculateEstimatedTotalInIdr,
   calculateEstimatedTotalInJpy,
   calculateMonthlyTotals,
+  calculateWalletBalance,
   formatMoney,
   type Currency,
   type TransactionType,
@@ -201,6 +202,10 @@ export default function Home() {
   const [walletName, setWalletName] = useState("");
   const [walletCurrency, setWalletCurrency] = useState<Currency>("IDR");
   const [openingBalance, setOpeningBalance] = useState("");
+  const [walletKind, setWalletKind] = useState<"cash" | "credit">("cash");
+  const [creditLimit, setCreditLimit] = useState("");
+  const [statementClosingDay, setStatementClosingDay] = useState("");
+  const [paymentDueDay, setPaymentDueDay] = useState("");
 
   const [transactionType, setTransactionType] = useState<TransactionType>("expense");
   const [transactionWallet, setTransactionWallet] = useState("");
@@ -511,15 +516,31 @@ export default function Home() {
     setEditingWallet(wallet ?? null);
     setWalletName(wallet?.name ?? "");
     setWalletCurrency(wallet?.currency ?? "IDR");
+    setWalletKind(wallet?.kind ?? "cash");
     setOpeningBalance(wallet ? String(wallet.openingBalance) : "");
+    setCreditLimit(wallet?.creditLimit ? String(wallet.creditLimit) : "");
+    setStatementClosingDay(wallet?.statementClosingDay ? String(wallet.statementClosingDay) : "");
+    setPaymentDueDay(wallet?.paymentDueDay ? String(wallet.paymentDueDay) : "");
     setModal("wallet");
   }
 
   async function saveWallet(event: React.FormEvent) {
     event.preventDefault();
     const amount = Number(openingBalance || 0);
+    const limit = creditLimit.trim() ? Number(creditLimit) : undefined;
+    const closingDay = statementClosingDay.trim() ? Number(statementClosingDay) : undefined;
+    const dueDay = paymentDueDay.trim() ? Number(paymentDueDay) : undefined;
     if (!walletName.trim() || !Number.isSafeInteger(amount) || amount < 0) {
-      setToast("Lengkapi nama dan saldo awal");
+      setToast(walletKind === "credit" ? "Lengkapi nama dan utang awal kartu" : "Lengkapi nama dan saldo awal");
+      return;
+    }
+    if (
+      walletKind === "credit" &&
+      ((limit !== undefined && (!Number.isSafeInteger(limit) || limit <= 0)) ||
+        (closingDay !== undefined && (!Number.isInteger(closingDay) || closingDay < 1 || closingDay > 31)) ||
+        (dueDay !== undefined && (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31)))
+    ) {
+      setToast("Periksa limit dan tanggal tagihan kartu kredit.");
       return;
     }
     const now = new Date().toISOString();
@@ -529,12 +550,20 @@ export default function Home() {
         name: walletName.trim(),
         currency: editingWallet?.currency ?? walletCurrency,
         openingBalance: amount,
+        kind: walletKind,
+        creditLimit: walletKind === "credit" ? limit : undefined,
+        statementClosingDay: walletKind === "credit" ? closingDay : undefined,
+        paymentDueDay: walletKind === "credit" ? dueDay : undefined,
         createdAt: editingWallet?.createdAt ?? now,
         updatedAt: now,
       });
       await refreshWallets();
       setWalletName("");
       setOpeningBalance("");
+      setWalletKind("cash");
+      setCreditLimit("");
+      setStatementClosingDay("");
+      setPaymentDueDay("");
       setEditingWallet(null);
       setModal(null);
       setToast(editingWallet ? "Dompet berhasil diperbarui" : "Dompet berhasil ditambahkan");
@@ -1199,7 +1228,7 @@ export default function Home() {
   async function exportBackup() {
     const exportedAt = new Date().toISOString();
     const backup: BackupEnvelope = {
-      schemaVersion: 7,
+      schemaVersion: 8,
       exportedAt,
       app: "Cuanku",
       wallets,
@@ -1884,7 +1913,23 @@ export default function Home() {
                         <div className="wallet-main">
                           <span>{wallet.currency}</span>
                           <h3>{wallet.name}</h3>
-                          <strong>{formatMoney(calculateCurrencyBalances([wallet], domainTransactions, domainTransfers)[wallet.currency], wallet.currency)}</strong>
+                          {wallet.kind === "credit" ? (
+                            <>
+                              <strong>{formatMoney(calculateWalletBalance(wallet, domainTransactions, domainTransfers), wallet.currency)}</strong>
+                              <small>{wallet.creditLimit
+                                ? `Utang · Sisa limit ${formatMoney(Math.max(0, wallet.creditLimit - calculateWalletBalance(wallet, domainTransactions, domainTransfers)), wallet.currency)}`
+                                : "Utang kartu kredit"}</small>
+                              {(wallet.statementClosingDay || wallet.paymentDueDay) && (
+                                <small>
+                                  {wallet.statementClosingDay ? `Tutup ${wallet.statementClosingDay}` : ""}
+                                  {wallet.statementClosingDay && wallet.paymentDueDay ? " · " : ""}
+                                  {wallet.paymentDueDay ? `Jatuh tempo ${wallet.paymentDueDay}` : ""}
+                                </small>
+                              )}
+                            </>
+                          ) : (
+                            <strong>{formatMoney(calculateCurrencyBalances([wallet], domainTransactions, domainTransfers)[wallet.currency], wallet.currency)}</strong>
+                          )}
                         </div>
                         <div className="wallet-actions">
                           <button className="icon-button" onClick={() => openWallet(wallet)} aria-label={`Edit ${wallet.name}`}><Pencil size={16} /></button>
@@ -2293,6 +2338,9 @@ export default function Home() {
               <form onSubmit={saveTransferRecord}>
                 <label>Dompet asal<select value={transferFromWallet} onChange={(event) => setTransferFromWallet(event.target.value)}>{wallets.map((wallet) => <option value={wallet.id} key={wallet.id}>{wallet.name} ({wallet.currency})</option>)}</select></label>
                 <label>Dompet tujuan<select value={transferToWallet} onChange={(event) => setTransferToWallet(event.target.value)}>{wallets.map((wallet) => <option value={wallet.id} key={wallet.id}>{wallet.name} ({wallet.currency})</option>)}</select></label>
+                {transferToWalletRecord?.kind === "credit" && (
+                  <p className="form-hint">Transfer ke kartu kredit dianggap sebagai pembayaran dan mengurangi utang kartu.</p>
+                )}
                 <label>{transferKind === "conversion" ? "Nominal sumber" : "Nominal yang dipindahkan"}<input type="number" min="1" step="1" value={transferFromAmount} onChange={(event) => setTransferFromAmount(event.target.value)} placeholder="0" /></label>
                 <label>Biaya admin (mata uang dompet asal)<input type="number" min="0" step="1" value={transferFeeAmount} onChange={(event) => setTransferFeeAmount(event.target.value)} placeholder="0" /></label>
                 {transferFromWalletRecord && transferToWalletRecord &&
@@ -2342,7 +2390,15 @@ export default function Home() {
               <form onSubmit={saveWallet}>
                 <label>Nama dompet<input value={walletName} onChange={(event) => setWalletName(event.target.value)} placeholder="Contoh: Tabungan" /></label>
                 <label>Mata uang<select value={editingWallet?.currency ?? walletCurrency} disabled={Boolean(editingWallet)} onChange={(event) => setWalletCurrency(event.target.value as Currency)}><option value="JPY">JPY — Yen</option><option value="IDR">IDR — Rupiah</option></select></label>
-                <label>Saldo awal<input type="number" min="0" step="1" value={openingBalance} onChange={(event) => setOpeningBalance(event.target.value)} placeholder="0" /></label>
+                <label>Jenis dompet<select value={editingWallet?.kind ?? walletKind} disabled={Boolean(editingWallet)} onChange={(event) => setWalletKind(event.target.value as "cash" | "credit")}><option value="cash">Dompet / rekening</option><option value="credit">Kartu kredit</option></select></label>
+                <label>{(editingWallet?.kind ?? walletKind) === "credit" ? "Utang awal kartu" : "Saldo awal"}<input type="number" min="0" step="1" value={openingBalance} onChange={(event) => setOpeningBalance(event.target.value)} placeholder="0" /></label>
+                {(editingWallet?.kind ?? walletKind) === "credit" && (
+                  <>
+                    <label>Limit kartu (opsional)<input type="number" min="1" step="1" value={creditLimit} onChange={(event) => setCreditLimit(event.target.value)} placeholder="0" /></label>
+                    <label>Tanggal tutup tagihan (1–31)<input type="number" min="1" max="31" step="1" value={statementClosingDay} onChange={(event) => setStatementClosingDay(event.target.value)} placeholder="Contoh: 20" /></label>
+                    <label>Tanggal jatuh tempo (1–31)<input type="number" min="1" max="31" step="1" value={paymentDueDay} onChange={(event) => setPaymentDueDay(event.target.value)} placeholder="Contoh: 5" /></label>
+                  </>
+                )}
                 <button className="primary-button wide" type="submit">{editingWallet ? "Simpan perubahan" : "Simpan dompet"}</button>
               </form>
             ) : (
@@ -2352,6 +2408,9 @@ export default function Home() {
                   <button type="button" className={transactionType === "expense" ? "selected" : ""} onClick={() => { setTransactionType("expense"); setTransactionCategory(categories.find((item) => item.type === "expense")?.id ?? ""); }}>Pengeluaran</button>
                 </div>
                 <label>Dompet<select value={transactionWallet} onChange={(event) => setTransactionWallet(event.target.value)}>{wallets.map((wallet) => <option value={wallet.id} key={wallet.id}>{wallet.name} ({wallet.currency})</option>)}</select></label>
+                {wallets.find((wallet) => wallet.id === transactionWallet)?.kind === "credit" && (
+                  <p className="form-hint">Pengeluaran menambah utang kartu. Pemasukan dapat dipakai untuk refund atau koreksi tagihan.</p>
+                )}
                 <label>Nominal<input type="number" min="1" step="1" value={transactionAmount} onChange={(event) => setTransactionAmount(event.target.value)} placeholder="0" /></label>
                 <label>Kategori<select value={transactionCategory} onChange={(event) => setTransactionCategory(event.target.value)}>{categories.filter((item) => item.type === transactionType).map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>
                 <label>Tanggal<input type="date" value={transactionDate} onChange={(event) => setTransactionDate(event.target.value)} /></label>

@@ -13,6 +13,10 @@ export const walletSchema = z.object({
   name: z.string().trim().min(1).max(80),
   currency: z.enum(["JPY", "IDR"]),
   openingBalance: z.number().safe().int().nonnegative(),
+  kind: z.enum(["cash", "credit"]).optional().default("cash"),
+  creditLimit: z.number().safe().int().positive().optional(),
+  statementClosingDay: z.number().int().min(1).max(31).optional(),
+  paymentDueDay: z.number().int().min(1).max(31).optional(),
   createdAt: z.iso.datetime({ offset: true }),
   updatedAt: z.iso.datetime({ offset: true }),
 });
@@ -181,9 +185,13 @@ const backupV6Schema = backupV5Schema.extend({
   preferences: preferenceV6Schema.optional(),
 });
 
-export const backupSchema = backupV6Schema.extend({
+const backupV7Schema = backupV6Schema.extend({
   schemaVersion: z.literal(7),
   transfers: z.array(transferSchema),
+});
+
+export const backupSchema = backupV7Schema.extend({
+  schemaVersion: z.literal(8),
 });
 
 type ParsedBackup = {
@@ -202,7 +210,7 @@ type ParsedBackup = {
 
 function normalizeBackup(parsed: ParsedBackup): BackupEnvelope {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     exportedAt: parsed.exportedAt,
     app: parsed.app,
     wallets: parsed.wallets,
@@ -238,7 +246,8 @@ function parseBackupVersion(value: unknown): BackupEnvelope {
     4: "Struktur backup versi 4 tidak valid. Data lokal tidak diubah.",
     5: "Struktur backup versi 5 tidak valid. Data lokal tidak diubah.",
     6: "Struktur backup versi 6 tidak valid. Data lokal tidak diubah.",
-    7: "Struktur file backup tidak valid. Data lokal tidak diubah.",
+    7: "Struktur backup versi 7 tidak valid. Data lokal tidak diubah.",
+    8: "Struktur file backup tidak valid. Data lokal tidak diubah.",
   };
   const schemas = {
     1: backupV1Schema,
@@ -247,7 +256,8 @@ function parseBackupVersion(value: unknown): BackupEnvelope {
     4: backupV4Schema,
     5: backupV5Schema,
     6: backupV6Schema,
-    7: backupSchema,
+    7: backupV7Schema,
+    8: backupSchema,
   } as const;
   const schema = schemas[version.data.schemaVersion as keyof typeof schemas];
   if (!schema) throw new Error(`Versi backup ${version.data.schemaVersion} tidak didukung.`);

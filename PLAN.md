@@ -1,6 +1,6 @@
 # Cuanku Development Plan
 
-Status: Fase 8–13 diimplementasikan dan quality gates lulus; deployment dilakukan setelah push.
+Status: Fase 8–13 dan fitur dasar kartu kredit diimplementasikan; quality gates lulus; deployment dilakukan setelah push.
 
 ## 1. Tujuan
 
@@ -378,6 +378,14 @@ Fase 6–7 dirilis bersama pada commit `2cbc064`.
 - Pembaruan baru diterapkan atas tindakan pengguna, dan aksi ditahan selama form masih terbuka.
 
 Fase 14–18 tetap berada di luar lingkup pekerjaan ini. Setiap perubahan pada entitas keuangan harus mempertahankan migrasi backup, operasi IndexedDB atomik, dan tes invariant.
+
+#### Fitur Dasar Kartu Kredit (diimplementasikan)
+- Tambah jenis dompet kartu kredit terpisah dari dompet/rekening kas.
+- Kartu kredit menyimpan limit, tanggal tutup tagihan, tanggal jatuh tempo, dan utang awal.
+- Pengeluaran pada kartu kredit menambah utang; refund atau koreksi dapat mengurangi utang.
+- Transfer dari rekening kas ke kartu kredit dianggap pembayaran dan mengurangi utang.
+- Utang kartu kredit tidak dicampur dengan saldo kas JPY/IDR.
+- Pembelian kartu kredit tetap tampil sebagai pengeluaran pada laporan periode, sesuai tanggal transaksi.
 
 ## 12. Quality Gates
 

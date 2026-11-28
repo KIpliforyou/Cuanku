@@ -45,6 +45,30 @@ describe("domain balance calculations", () => {
     expect(calculateCurrencyBalances(sameCurrencyWallets, fee, transfer)).toEqual({ JPY: 1090, IDR: 0 });
   });
 
+  it("calculates credit wallet debt separately and excludes it from cash balances", () => {
+    const creditWallet: Wallet = {
+      id: "credit",
+      currency: "IDR",
+      openingBalance: 500000,
+      kind: "credit",
+      creditLimit: 5000000,
+    };
+    const cashWallet: Wallet = {
+      id: "bank",
+      currency: "IDR",
+      openingBalance: 1000000,
+      kind: "cash",
+    };
+    const purchases = [{ walletId: "credit", type: "expense" as const, amount: 250000 }];
+    const payment = [{ fromWalletId: "bank", toWalletId: "credit", fromAmount: 300000, toAmount: 300000 }];
+
+    expect(calculateWalletBalance(creditWallet, purchases, payment)).toBe(450000);
+    expect(calculateCurrencyBalances([creditWallet, cashWallet], purchases, payment)).toEqual({
+      JPY: 0,
+      IDR: 700000,
+    });
+  });
+
   it("calculates estimated total in IDR using JPY rate", () => {
     expect(
       calculateEstimatedTotalInIdr({ JPY: 1300, IDR: 400000 }, 108.42),

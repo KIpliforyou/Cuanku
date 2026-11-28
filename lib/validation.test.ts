@@ -29,7 +29,7 @@ const backup = {
 describe("backup validation", () => {
   it("migrates a valid version 1 backup without losing transactions", () => {
     const migrated = validateBackup(backup);
-    expect(migrated.schemaVersion).toBe(7);
+    expect(migrated.schemaVersion).toBe(8);
     expect(migrated.transactions).toEqual(backup.transactions);
     expect(migrated.budgets).toEqual([]);
     expect(migrated.exchangeRateHistory).toEqual([]);
@@ -60,7 +60,7 @@ describe("backup validation", () => {
   it("preserves current backup preferences and budgets", () => {
     const current = validateBackup({
       ...backup,
-      schemaVersion: 7,
+      schemaVersion: 8,
       budgets: [{
         id: "budget-1",
         walletId: "wallet-1",
@@ -129,6 +129,42 @@ describe("backup validation", () => {
     });
 
     expect(migrated.transfers.map((transfer) => transfer.kind)).toEqual(["transfer", "conversion"]);
+  });
+
+  it("migrates legacy wallets as cash and accepts credit wallet settings", () => {
+    const migrated = validateBackup({
+      ...backup,
+      schemaVersion: 7,
+      budgets: [],
+      exchangeRateHistory: [],
+      transfers: [],
+      recurringRules: [],
+      recurringDrafts: [],
+    });
+    expect(migrated.wallets[0].kind).toBe("cash");
+
+    const credit = validateBackup({
+      ...backup,
+      schemaVersion: 8,
+      budgets: [],
+      exchangeRateHistory: [],
+      transfers: [],
+      recurringRules: [],
+      recurringDrafts: [],
+      wallets: [{
+        ...backup.wallets[0],
+        kind: "credit",
+        creditLimit: 5000000,
+        statementClosingDay: 20,
+        paymentDueDay: 5,
+      }],
+    });
+    expect(credit.wallets[0]).toMatchObject({
+      kind: "credit",
+      creditLimit: 5000000,
+      statementClosingDay: 20,
+      paymentDueDay: 5,
+    });
   });
 
   it("requires matching currencies for transfers and an accurate snapshot for conversions", () => {

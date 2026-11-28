@@ -18,6 +18,10 @@ export type Wallet = {
   name?: string;
   currency: Currency;
   openingBalance: number;
+  kind?: "cash" | "credit";
+  creditLimit?: number;
+  statementClosingDay?: number;
+  paymentDueDay?: number;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -46,6 +50,19 @@ export function calculateWalletBalance(
   transactions: Transaction[],
   transfers: WalletTransfer[] = [],
 ): number {
+  if (wallet.kind === "credit") {
+    const purchases = transactions
+      .filter((transaction) => transaction.walletId === wallet.id)
+      .reduce((balance, transaction) =>
+        balance + (transaction.type === "expense" ? transaction.amount : -transaction.amount),
+      0);
+    const payments = transfers.reduce((balance, transfer) =>
+      balance +
+      (transfer.toWalletId === wallet.id ? -transfer.toAmount : 0) +
+      (transfer.fromWalletId === wallet.id ? transfer.fromAmount : 0),
+    0);
+    return Math.max(0, wallet.openingBalance + purchases + payments);
+  }
   const transactionBalance = transactions
     .filter((transaction) => transaction.walletId === wallet.id)
     .reduce(
@@ -68,10 +85,10 @@ export function calculateCurrencyBalances(
 ): Record<Currency, number> {
   return {
     JPY: wallets
-      .filter((wallet) => wallet.currency === "JPY")
+      .filter((wallet) => wallet.currency === "JPY" && wallet.kind !== "credit")
       .reduce((total, wallet) => total + calculateWalletBalance(wallet, transactions, transfers), 0),
     IDR: wallets
-      .filter((wallet) => wallet.currency === "IDR")
+      .filter((wallet) => wallet.currency === "IDR" && wallet.kind !== "credit")
       .reduce((total, wallet) => total + calculateWalletBalance(wallet, transactions, transfers), 0),
   };
 }

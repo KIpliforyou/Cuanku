@@ -5,6 +5,10 @@ export type WalletRecord = {
   name: string;
   currency: Currency;
   openingBalance: number;
+  kind?: "cash" | "credit";
+  creditLimit?: number;
+  statementClosingDay?: number;
+  paymentDueDay?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -148,7 +152,7 @@ export type Preferences = {
 };
 
 export type BackupEnvelope = {
-  schemaVersion: 7;
+  schemaVersion: 8;
   exportedAt: string;
   app: "Cuanku";
   wallets: WalletRecord[];

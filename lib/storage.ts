@@ -20,7 +20,7 @@ import type {
 import { getDueRecurringDates } from "./recurring";
 import { getTokyoDateString, rateFromScaled } from "./exchange-rate";
 
-export const DATABASE_SCHEMA_VERSION = 7;
+export const DATABASE_SCHEMA_VERSION = 8;
 
 export interface CuankuDB extends DBSchema {
   wallets: { key: string; value: WalletRecord };
@@ -70,6 +70,16 @@ export function applyCuankuMigrations(
       for (const budget of budgets) {
         if (!Array.isArray(budget.alertThresholds)) {
           void budgetStore.put({ ...budget, alertThresholds: [80, 100] });
+        }
+      }
+    });
+  }
+  if (oldVersion < 8) {
+    const walletStore = transaction.objectStore("wallets");
+    void walletStore.getAll().then((wallets) => {
+      for (const wallet of wallets) {
+        if (!wallet.kind) {
+          void walletStore.put({ ...wallet, kind: "cash" });
         }
       }
     });
